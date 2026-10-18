@@ -1,0 +1,46 @@
+# Build phases
+
+All five phases are complete.
+
+## Phase 1 — Foundation
+
+- Next.js + TypeScript scaffold
+- Docker Compose: Postgres + n8n
+- Env template, docs, folder conventions
+- Minimal status home page
+
+## Phase 2 — Ingest + dedupe
+
+- Drizzle schema (sources, articles, analyses placeholders, preferences, ingest_runs)
+- Multi-topic seed feeds (AI, web, sports, world, science, …)
+- RSS fetch + normalize
+- Canonical URL dedupe into Postgres
+- Manual CLI (`npm run ingest:run`) or `POST /api/ingest/collect`
+
+## Phase 3 — AI analyze
+
+- Structured JSON prompt (summary, score, topics, takeaways)
+- Zod validation via Groq `json_object`
+- Persist analysis; never re-analyze if row already exists
+- Token + estimated USD cost logging
+- CLI `npm run analyze:run` / `POST /api/analyze`
+
+## Phase 4 — n8n + Telegram digest
+
+- Digest select (diverse top items) + Telegram HTML format
+- Idempotent daily send (`digests` unique on date+channel); dry_run without bot
+- `workflow_runs` for monitor
+- Importable workflow: `n8n/workflows/daily-digest.json`
+- APIs: `/api/digest/*`, `/api/pipeline/daily`
+
+## Phase 5 — Dashboard
+
+- InsightLoop shell from the moodboard: sidebar + topbar on desktop, bottom tabs on mobile
+- Home: stats, top highlights (one per topic), recent summaries, pipeline + digest cards
+- Explore: search, topic / score / sort filters, pagination, analyze-more
+- Article detail: summary, why it matters, takeaways, action items, relevance gauge, save, 👍/👎
+- Newsletter: today’s digest, Telegram preview, send / rebuild, history
+- Saved, Sources (add / toggle / delete, feed health), Preferences, Settings
+- Workflow monitor: n8n node diagram with step status, execution log, 7-day chart, AI cost & feedback
+- n8n workflow records every execution via `/api/workflow/runs` (start + finish)
+- Groq rate-limit (429) waits instead of failing articles

@@ -1,0 +1,209 @@
+{
+  "id": "insightloopdaily",
+  "name": "InsightLoop — Daily Digest",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 220],
+      "notesInFlow": true,
+      "notes": "Hourly. The app only sends the digest once the user's preferred hour (Preferences) has passed — and only once per day."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/workflow/runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"trigger\": \"manual\" }",
+        "options": { "timeout": 15000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Start Run (manual)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/workflow/runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"trigger\": \"schedule\" }",
+        "options": { "timeout": 15000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Start Run (schedule)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 220],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/ingest/collect",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $json.run.id, respectSchedule: $json.run.respectSchedule }) }}",
+        "options": {
+          "timeout": 120000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "RSS Read + Dedupe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notesInFlow": true,
+      "notes": "Fetch enabled feeds for followed topics → canonical URL dedupe → Postgres."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/analyze",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $json.run.id, respectSchedule: $json.run.respectSchedule, limit: 8 }) }}",
+        "options": {
+          "timeout": 240000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "AI Agent (Score & Summarize)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 100],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notesInFlow": true,
+      "notes": "Groq structured JSON → Zod validation. Each article analyzed once."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/digest/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $json.run.id, respectSchedule: $json.run.respectSchedule }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Telegram Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notesInFlow": true,
+      "notes": "Idempotent: one Telegram send per day. Dry run when bot is not configured."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/workflow/runs/{{ $json.run.id }}/finish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-ingest-secret", "value": "={{ $env.INGEST_SECRET }}" }]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Finish Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Start Run (manual)", "type": "main", "index": 0 }]]
+    },
+    "Schedule Trigger": {
+      "main": [[{ "node": "Start Run (schedule)", "type": "main", "index": 0 }]]
+    },
+    "Start Run (manual)": {
+      "main": [[{ "node": "RSS Read + Dedupe", "type": "main", "index": 0 }]]
+    },
+    "Start Run (schedule)": {
+      "main": [[{ "node": "RSS Read + Dedupe", "type": "main", "index": 0 }]]
+    },
+    "RSS Read + Dedupe": {
+      "main": [[{ "node": "AI Agent (Score & Summarize)", "type": "main", "index": 0 }]]
+    },
+    "AI Agent (Score & Summarize)": {
+      "main": [[{ "node": "Telegram Digest", "type": "main", "index": 0 }]]
+    },
+    "Telegram Digest": {
+      "main": [[{ "node": "Finish Run", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Belgrade"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

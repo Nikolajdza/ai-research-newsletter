@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: airn-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airn_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_research_newsletter}
+    ports:
+      # Host 5433 avoids clashing with a local Postgres already on 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airn} -d ${POSTGRES_DB:-ai_research_newsletter}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: airn-n8n
+    restart: unless-stopped
+    ports:
+      # Host 5679 avoids clashing with another local n8n on 5678
+      - "${N8N_PORT:-5679}:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5679/}
+      GENERIC_TIMEZONE: ${TZ:-Europe/Belgrade}
+      TZ: ${TZ:-Europe/Belgrade}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-dev-only-change-me-in-prod}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5679/}
+      # Workflow nodes read these via $env so URLs/secrets are not hardcoded in JSON.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      APP_BASE_URL: ${APP_BASE_URL_FROM_N8N:-http://host.docker.internal:3000}
+      INGEST_SECRET: ${INGEST_SECRET:-dev-insightloop-secret}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  n8n_data:

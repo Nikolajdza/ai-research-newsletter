@@ -1,26 +1,81 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #080a14;
+  --foreground: #eef0fa;
+  --panel: #0f1222;
+  --panel-2: #151a2e;
+  --line: rgba(255, 255, 255, 0.07);
+  --muted: #8a90ab;
+  --accent: #7b5cff;
+  --accent-2: #5b7cff;
+  --success: #3ddc97;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-success: var(--success);
+  --font-sans: var(--font-inter);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(123, 92, 255, 0.12), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(91, 124, 255, 0.08), transparent 60%),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+
+/* Purple dusk landscape used for promo / digest hero cards. */
+.dusk {
+  background:
+    radial-gradient(120% 70% at 50% 120%, rgba(20, 16, 50, 0.95) 30%, transparent 60%),
+    radial-gradient(80% 50% at 20% 100%, #1d1650 0%, transparent 70%),
+    radial-gradient(60% 40% at 80% 95%, #261a63 0%, transparent 70%),
+    radial-gradient(70% 60% at 50% 35%, rgba(255, 170, 230, 0.35), transparent 60%),
+    linear-gradient(180deg, #2a2a7a 0%, #6a4bd8 45%, #c38be8 70%, #3a2a8a 100%);
+}
+
+.glow-accent {
+  box-shadow: 0 10px 40px -10px rgba(123, 92, 255, 0.6);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.45s ease-out both;
 }
