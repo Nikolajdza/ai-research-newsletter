@@ -4,7 +4,7 @@ import {
   articleAnalyses,
   articles,
   sources,
-  type TopicSlug,
+  type TopicKey,
 } from "../db/schema";
 import { getFollowedTopics } from "../followed-topics";
 import { analyzeArticleWithGroq, estimateCostUsd } from "./groq";
@@ -27,7 +27,7 @@ type PendingArticle = {
   id: string;
   title: string;
   url: string;
-  topic: TopicSlug;
+  topic: TopicKey;
   excerpt: string | null;
   sourceName: string;
 };
@@ -45,7 +45,7 @@ const pendingSelect = {
  * Round-robin across followed topics so one busy feed can't eat the whole
  * analysis budget; recent articles first.
  */
-async function pickPending(limit: number, topics: TopicSlug[]): Promise<PendingArticle[]> {
+async function pickPending(limit: number, topics: TopicKey[]): Promise<PendingArticle[]> {
   const since = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const perTopic = Math.max(1, Math.ceil(limit / Math.max(topics.length, 1)));
 
@@ -100,7 +100,7 @@ async function pickPending(limit: number, topics: TopicSlug[]): Promise<PendingA
   return picked;
 }
 
-async function analyzeAndPersist(article: PendingArticle, selectedTopics: TopicSlug[]) {
+async function analyzeAndPersist(article: PendingArticle, selectedTopics: TopicKey[]) {
   const llm = await analyzeArticleWithGroq({ ...article, selectedTopics });
 
   const [row] = await db
@@ -130,10 +130,12 @@ async function analyzeAndPersist(article: PendingArticle, selectedTopics: TopicS
  */
 export async function analyzeUnanalyzedArticles(options?: {
   limit?: number;
+  /** Restrict to these topics instead of everything readers follow */
+  topics?: TopicKey[];
 }): Promise<AnalyzeBatchResult> {
   const limit = options?.limit ?? 10;
   const selectedTopics = await getFollowedTopics();
-  const pending = await pickPending(limit, selectedTopics);
+  const pending = await pickPending(limit, options?.topics ?? selectedTopics);
 
   const result: AnalyzeBatchResult = {
     examined: pending.length,

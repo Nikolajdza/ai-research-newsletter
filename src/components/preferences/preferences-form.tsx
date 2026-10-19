@@ -1,24 +1,27 @@
 "use client";
 
-import { Check, Loader2, Mail, Send } from "lucide-react";
+import { Check, Loader2, Mail, Send, X } from "lucide-react";
 import { useState, useTransition } from "react";
-import { savePreferencesAction, type ActionResult, type PreferencesInput } from "@/app/actions";
+import { savePreferencesAction, unfollowTopicAction, type ActionResult, type PreferencesInput } from "@/app/actions";
 import { formatHour, TIMEZONES } from "@/lib/format";
-import { TOPIC_SLUGS, TOPICS, type TopicSlug } from "@/lib/topics";
+import { TOPIC_GROUPS, TOPIC_SLUGS, TOPICS, type TopicKey } from "@/lib/topics";
 import { Switch } from "../ui/switch";
 import { TopicIcon } from "../ui/topic-icon";
 import { SourceToggle } from "../sources/source-controls";
+import { TopicDiscovery } from "./topic-discovery";
 
-type SourceItem = { id: string; name: string; feedUrl: string; topic: TopicSlug; enabled: boolean };
+type SourceItem = { id: string; name: string; feedUrl: string; topic: TopicKey; enabled: boolean };
 
 export function PreferencesForm({
   initial,
   sources,
+  customTopics,
   telegramConnected,
   canManageSources,
 }: {
   initial: PreferencesInput;
   sources: SourceItem[];
+  customTopics: { key: string; label: string }[];
   telegramConnected: boolean;
   canManageSources: boolean;
 }) {
@@ -31,7 +34,7 @@ export function PreferencesForm({
     setState((s) => ({ ...s, [key]: value }));
   };
 
-  const toggleTopic = (topic: TopicSlug) =>
+  const toggleTopic = (topic: TopicKey) =>
     set(
       "selectedTopics",
       state.selectedTopics.includes(topic)
@@ -51,29 +54,65 @@ export function PreferencesForm({
       <div className="space-y-6">
         <section className="card p-5">
           <h2 className="font-semibold">Topics of Interest</h2>
-          <p className="mt-1 text-sm text-muted">Select the topics you want to follow — tech, sports, world news, anything.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TOPIC_SLUGS.map((topic) => {
-              const active = state.selectedTopics.includes(topic);
-              return (
-                <button
-                  key={topic}
-                  type="button"
-                  onClick={() => toggleTopic(topic)}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ring-1 transition-all ${
-                    active
-                      ? "bg-accent/20 text-foreground ring-accent/50"
-                      : "bg-white/[0.02] text-muted ring-line hover:text-foreground"
-                  }`}
-                >
-                  <TopicIcon topic={topic} className="h-4 w-4" />
-                  {TOPICS[topic].label}
-                  {active && <Check className="h-3.5 w-3.5 text-accent" />}
-                </button>
-              );
-            })}
-          </div>
+          <p className="mt-1 text-sm text-muted">
+            Pick from the catalog, then press Save. Missing something? Add any topic below.
+          </p>
+
+          {customTopics.length > 0 && (
+            <div className="mt-5">
+              <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">Your topics</p>
+              <div className="flex flex-wrap gap-2">
+                {customTopics.map((t) => (
+                  <span
+                    key={t.key}
+                    className="inline-flex items-center gap-2 rounded-xl bg-accent/20 py-2 pr-1.5 pl-3 text-sm ring-1 ring-accent/50"
+                  >
+                    <TopicIcon topic={t.key} className="h-4 w-4" />
+                    {t.label}
+                    <button
+                      type="button"
+                      aria-label={`Stop following ${t.label}`}
+                      disabled={pending}
+                      onClick={() => startTransition(async () => setResult(await unfollowTopicAction(t.key)))}
+                      className="grid h-6 w-6 place-items-center rounded-lg text-muted hover:bg-white/10 hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {TOPIC_GROUPS.map((group) => (
+            <div key={group} className="mt-5">
+              <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">{group}</p>
+              <div className="flex flex-wrap gap-2">
+                {TOPIC_SLUGS.filter((t) => TOPICS[t].group === group).map((topic) => {
+                  const active = state.selectedTopics.includes(topic);
+                  return (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => toggleTopic(topic)}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ring-1 transition-all ${
+                        active
+                          ? "bg-accent/20 text-foreground ring-accent/50"
+                          : "bg-white/[0.02] text-muted ring-line hover:text-foreground"
+                      }`}
+                    >
+                      <TopicIcon topic={topic} className="h-4 w-4" />
+                      {TOPICS[topic].label}
+                      {active && <Check className="h-3.5 w-3.5 text-accent" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </section>
+
+        <TopicDiscovery followed={state.selectedTopics} />
 
         <section className="card p-5">
           <h2 className="font-semibold">Sources</h2>

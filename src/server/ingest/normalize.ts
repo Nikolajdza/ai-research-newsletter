@@ -1,5 +1,5 @@
 import { canonicalizeUrl } from "./canonicalize";
-import type { TopicSlug } from "../db/schema";
+import type { TopicKey } from "../db/schema";
 
 export type NormalizedArticle = {
   title: string;
@@ -9,7 +9,7 @@ export type NormalizedArticle = {
   imageUrl: string | null;
   author: string | null;
   publishedAt: Date | null;
-  topic: TopicSlug;
+  topic: TopicKey;
   sourceId: string;
 };
 
@@ -111,7 +111,7 @@ function pickImage(item: RawFeedItem): string | null {
 
 export function normalizeRssItem(
   item: RawFeedItem,
-  ctx: { sourceId: string; topic: TopicSlug },
+  ctx: { sourceId: string; topic: TopicKey },
 ): NormalizedArticle | null {
   const title = item.title?.trim();
   const url = item.link?.trim();

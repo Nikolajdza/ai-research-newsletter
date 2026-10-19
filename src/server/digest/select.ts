@@ -7,7 +7,7 @@ import {
   sources,
   userArticles,
   type preferences,
-  type TopicSlug,
+  type TopicKey,
 } from "../db/schema";
 
 export type PreferencesRow = typeof preferences.$inferSelect;
@@ -17,7 +17,7 @@ export type DigestCandidate = {
   title: string;
   url: string;
   imageUrl: string | null;
-  topic: TopicSlug;
+  topic: TopicKey;
   sourceName: string;
   summary: string | null;
   relevanceScore: number;
@@ -30,7 +30,7 @@ export type DigestSelection = {
   timezone: string;
   format: string;
   minRelevanceScore: number;
-  selectedTopics: TopicSlug[];
+  selectedTopics: TopicKey[];
   items: DigestCandidate[];
 };
 

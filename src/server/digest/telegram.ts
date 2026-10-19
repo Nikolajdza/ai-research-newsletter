@@ -1,4 +1,4 @@
-import { TOPICS } from "@/lib/topics";
+import { topicMeta } from "@/lib/topics";
 import type { DigestCandidate } from "./select";
 
 type TelegramResponse<T> = { ok: boolean; result?: T; description?: string };
@@ -66,7 +66,7 @@ function truncate(text: string, max: number): string {
 
 /** One article as a Telegram card caption (HTML, fits the 1024-char photo caption limit). */
 export function formatCardCaption(item: DigestCandidate, index: number, format: string): string {
-  const topic = TOPICS[item.topic];
+  const topic = topicMeta(item.topic);
   const head = [
     `<b>${index + 1}. ${escapeHtml(item.title)}</b>`,
     `${topic.emoji} ${escapeHtml(topic.label)} · ⭐ ${item.relevanceScore.toFixed(1)} · ${escapeHtml(item.sourceName)}`,

@@ -1,19 +1,19 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { readMinutes, timeAgo } from "@/lib/format";
-import type { ArticleListItem } from "@/server/queries";
+import type { PublicArticle } from "@/server/queries";
 import { ScorePill, TopicChip } from "../ui/badges";
 import { Thumb } from "../ui/thumb";
 
-function meta(article: ArticleListItem, now: number) {
+function meta(article: PublicArticle, now: number) {
   const when = timeAgo(article.publishedAt ?? article.fetchedAt, now);
   return `${when} · ${readMinutes(article.summary ?? article.excerpt)} min read`;
 }
 
-export function ArticleCard({ article, now }: { article: ArticleListItem; now: number }) {
+export function ArticleCard({ article, now, href }: { article: PublicArticle; now: number; href?: string }) {
   return (
     <Link
-      href={`/articles/${article.id}`}
+      href={href ?? `/articles/${article.id}`}
       className="card group flex flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_20px_50px_-20px_rgba(123,92,255,0.45)]"
     >
       <Thumb imageUrl={article.imageUrl} topic={article.topic} className="aspect-[16/9] w-full" />
@@ -34,10 +34,10 @@ export function ArticleCard({ article, now }: { article: ArticleListItem; now: n
   );
 }
 
-export function ArticleRow({ article, now }: { article: ArticleListItem; now: number }) {
+export function ArticleRow({ article, now, href }: { article: PublicArticle; now: number; href?: string }) {
   return (
     <Link
-      href={`/articles/${article.id}`}
+      href={href ?? `/articles/${article.id}`}
       className="group flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-white/[0.04]"
     >
       <Thumb

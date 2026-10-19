@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TOPICS, type TopicSlug } from "@/lib/topics";
+import { topicMeta, type TopicKey } from "@/lib/topics";
 import { TopicIcon } from "./topic-icon";
 
 export function Thumb({
@@ -11,7 +11,7 @@ export function Thumb({
   iconClassName = "h-10 w-10",
 }: {
   imageUrl: string | null;
-  topic: TopicSlug;
+  topic: TopicKey;
   className?: string;
   iconClassName?: string;
 }) {
@@ -32,7 +32,7 @@ export function Thumb({
         />
       ) : (
         <div
-          className={`grid h-full w-full place-items-center bg-gradient-to-br ${TOPICS[topic]?.thumb ?? "from-slate-700 to-slate-950"}`}
+          className={`grid h-full w-full place-items-center bg-gradient-to-br ${topicMeta(topic).thumb}`}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_45%)]" />
           <TopicIcon topic={topic} className={`relative text-white/90 drop-shadow ${iconClassName}`} />

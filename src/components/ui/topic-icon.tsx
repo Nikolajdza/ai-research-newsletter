@@ -1,28 +1,63 @@
 import {
   Atom,
+  Bitcoin,
   BrainCircuit,
   Briefcase,
+  Car,
+  Clapperboard,
   Code2,
+  Flag,
+  Gamepad2,
   Globe2,
+  Goal,
   HeartPulse,
+  Leaf,
+  Medal,
+  Music,
+  Palette,
+  Plane,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  Telescope,
   Timer,
+  TrendingUp,
   Trophy,
+  UtensilsCrossed,
+  Volleyball,
   type LucideIcon,
 } from "lucide-react";
-import type { TopicSlug } from "@/lib/topics";
+import { isCustomTopic, type TopicKey, type TopicSlug } from "@/lib/topics";
 
 const ICONS: Record<TopicSlug, LucideIcon> = {
   "ai-ml": BrainCircuit,
   "web-dev": Code2,
+  cybersecurity: ShieldCheck,
+  startups: Rocket,
+  gaming: Gamepad2,
   business: Briefcase,
+  markets: TrendingUp,
+  crypto: Bitcoin,
   sports: Trophy,
+  football: Goal,
+  basketball: Volleyball,
+  tennis: Medal,
+  motorsport: Flag,
   world: Globe2,
   science: Atom,
+  space: Telescope,
+  climate: Leaf,
   health: HeartPulse,
   productivity: Timer,
+  "movies-tv": Clapperboard,
+  music: Music,
+  design: Palette,
+  cars: Car,
+  food: UtensilsCrossed,
+  travel: Plane,
 };
 
-export function TopicIcon({ topic, className }: { topic: TopicSlug; className?: string }) {
-  const Icon = ICONS[topic] ?? Globe2;
+export function TopicIcon({ topic, className }: { topic: TopicKey; className?: string }) {
+  const Icon = isCustomTopic(topic) ? Sparkles : (ICONS[topic as TopicSlug] ?? Globe2);
   return <Icon className={className} />;
 }

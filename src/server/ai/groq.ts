@@ -4,7 +4,7 @@ import {
   type ArticleAnalysisOutput,
 } from "./schema";
 import { buildAnalysisSystemPrompt, buildAnalysisUserPrompt } from "./prompt";
-import type { TopicSlug } from "../db/schema";
+import type { TopicKey } from "../db/schema";
 
 export const DEFAULT_ANALYSIS_MODEL =
   process.env.GROQ_MODEL ?? "openai/gpt-oss-120b";
@@ -80,13 +80,29 @@ function extractJson(text: string): unknown {
   }
 }
 
+/** One JSON-mode completion; the caller validates the shape. */
+export async function groqJson(system: string, user: string): Promise<unknown> {
+  const completion = await withRateLimitRetry(() =>
+    getClient().chat.completions.create({
+      model: DEFAULT_ANALYSIS_MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  );
+  return extractJson(completion.choices[0]?.message?.content ?? "");
+}
+
 export async function analyzeArticleWithGroq(input: {
   title: string;
   url: string;
-  topic: TopicSlug;
+  topic: TopicKey;
   excerpt: string | null;
   sourceName: string;
-  selectedTopics: TopicSlug[];
+  selectedTopics: TopicKey[];
   model?: string;
 }): Promise<AnalysisLlmResult> {
   const model = input.model ?? DEFAULT_ANALYSIS_MODEL;

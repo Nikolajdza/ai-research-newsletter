@@ -1,8 +1,8 @@
 # InsightLoop — AI Research & Newsletter
 
-Multi-topic RSS (AI, web, business, world, sports, science, health, productivity) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally, browsable in a Next.js dashboard with accounts.
+Multi-topic RSS (25 curated topics from AI to Formula 1, plus anything a reader types) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally, browsable in a Next.js dashboard with accounts and a public Discover page.
 
-**Demo flow:** sign up → pick topics → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
+**Demo flow:** browse `/discover` → sign up → pick topics or type your own (“Elden Ring”, “Partizan košarka”) → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
 
 ## Quick start
 
@@ -21,15 +21,25 @@ The first account you register becomes the **admin** (manages sources, runs the 
 
 ## Accounts & personalization
 
-- **Auth**: email + password (scrypt), sessions stored in Postgres (`sessions`, only a SHA-256 of the cookie token is kept), `il_session` httpOnly cookie for 30 days. `src/proxy.ts` sends signed-out visitors to `/how-it-works` or `/login`.
+- **Auth**: email + password (scrypt), sessions stored in Postgres (`sessions`, only a SHA-256 of the cookie token is kept), `il_session` httpOnly cookie for 30 days. `src/proxy.ts` sends signed-out visitors to `/discover` (home) or `/login`.
 - **Shared vs. personal data**: articles and AI analyses are shared (each article is analyzed once). `preferences`, `user_articles` (saved + 👍/👎) and `digests` are per user.
 - **Collect what readers follow**: collect and analyze run over the union of every reader's topics.
 - **Your digest**: your topics, your minimum score, max 2 stories per topic, minus anything you 👎'd.
+
+## Topics
+
+- **Curated catalog**: 25 topics in 5 groups (Tech, Money, Sports, World & Science, Culture & Life) with seeded feeds.
+- **Add any topic** (`/preferences`): type a team, game, hobby or company, or paste an RSS link. Groq proposes a Google News search feed (in the right language/region), site feeds and subreddits; every candidate is fetched and parsed server-side (public hosts only, 10 s / 3 MB limits, stale feeds dropped) before you pick up to 4.
+- **Shared custom topics**: stored in `custom_topics` with a `c-<Label>` key. The next reader who types the same topic gets the existing feeds, so nothing is collected twice.
+- **Instant start**: following a custom topic collects it and analyzes its first stories in the background, so it shows up in Explore within a minute.
+- **Free-tier limits**: 5 custom topics per reader, 15 discovery searches per hour.
 
 ## Dashboard
 
 | Page | What it shows |
 |------|---------------|
+| `/discover` | Public, read-only: this week's best analyzed stories across curated topics, topic chips, stats |
+| `/discover/[id]` | Public story view: summary, why it matters, takeaways, link to source |
 | `/how-it-works` | Public explainer and sign-up CTA |
 | `/login`, `/register` | Auth |
 | `/` Home | Greeting, your stats, top highlights, recent AI summaries in your topics, pipeline + digest status |
@@ -39,7 +49,7 @@ The first account you register becomes the **admin** (manages sources, runs the 
 | `/saved` | Your reading list |
 | `/sources` | Feeds per topic and health; add / toggle / delete for the admin |
 | `/workflow` | n8n node diagram with live step status, execution log, 7-day stats, AI tokens & cost |
-| `/preferences` | Followed topics, digest time + timezone, min score, format, Telegram toggle |
+| `/preferences` | Grouped topic catalog, “Add any topic” discovery, your custom topics, digest time + timezone, min score, format, Telegram toggle |
 | `/settings` | Display name, Connect Telegram, sign out, integration health (admin) |
 
 Mobile layout uses a bottom tab bar (Home, Saved, Digest, Sources, Settings).
@@ -89,4 +99,4 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 
 ## Status
 
-**Phases 1–6 complete** (6 = accounts, personalization, card-style Telegram digest). Next: free hosting on Vercel + Supabase + Vercel Cron. Out of scope for now: autonomous agents, RAG / vector DB, WebSockets, email blasts, login-walled scraping.
+**Phases 1–7 complete** (6 = accounts, personalization, card-style Telegram digest; 7 = 25-topic catalog, add-any-topic discovery, public Discover). Next: free hosting on Vercel + Supabase + Vercel Cron. Out of scope for now: autonomous agents, RAG / vector DB, WebSockets, email blasts, login-walled scraping.

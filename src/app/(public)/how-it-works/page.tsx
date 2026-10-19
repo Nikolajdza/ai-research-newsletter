@@ -109,8 +109,8 @@ export default function HowItWorksPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Pick your beats</h2>
           <p className="mt-2 text-muted">
-            Follow any mix of topics. Change them anytime — the next digest follows your new picks, and new topics
-            start being collected within the hour.
+            Follow any mix of {TOPIC_SLUGS.length} curated topics — or type your own, like “Formula 1” or a single
+            video game. AI suggests news feeds, every feed is tested, and you choose which ones to follow.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             {TOPIC_SLUGS.map((slug) => (
@@ -118,6 +118,9 @@ export default function HowItWorksPage() {
                 {TOPICS[slug].emoji} {TOPICS[slug].label}
               </span>
             ))}
+            <span className="rounded-xl border border-dashed border-accent/50 px-3 py-1.5 text-sm text-accent">
+              + anything you type
+            </span>
           </div>
         </div>
 

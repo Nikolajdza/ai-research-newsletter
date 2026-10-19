@@ -11,7 +11,7 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!hasSession && !isPublic) {
-    const target = pathname === "/" ? "/how-it-works" : `/login?next=${encodeURIComponent(pathname + search)}`;
+    const target = pathname === "/" ? "/discover" : `/login?next=${encodeURIComponent(pathname + search)}`;
     return NextResponse.redirect(new URL(target, request.url));
   }
   return NextResponse.next();

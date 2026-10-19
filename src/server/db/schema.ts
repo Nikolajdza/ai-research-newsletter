@@ -11,9 +11,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { TopicSlug } from "../../lib/topics";
+import type { TopicKey } from "../../lib/topics";
 
-export { TOPIC_SLUGS, type TopicSlug } from "../../lib/topics";
+export { TOPIC_SLUGS, type TopicKey, type TopicSlug } from "../../lib/topics";
 
 export type UserRole = "admin" | "member";
 
@@ -49,9 +49,11 @@ export const sources = pgTable(
     name: text("name").notNull(),
     feedUrl: text("feed_url").notNull().unique(),
     siteUrl: text("site_url"),
-    /** Primary topic this feed maps to */
-    topic: text("topic").notNull().$type<TopicSlug>(),
+    /** Primary topic this feed maps to: a curated slug or a reader-created `c-…` key */
+    topic: text("topic").notNull().$type<TopicKey>(),
     enabled: boolean("enabled").notNull().default(true),
+    /** Set when a reader added the feed through topic discovery; null for the curated catalog */
+    addedByUserId: uuid("added_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -77,7 +79,7 @@ export const articles = pgTable(
     author: text("author"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** Topic inherited from source at ingest time */
-    topic: text("topic").notNull().$type<TopicSlug>(),
+    topic: text("topic").notNull().$type<TopicKey>(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -129,6 +131,19 @@ export const userArticles = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.articleId] })],
 );
 
+/** Reader-created topics, shared by key so two readers typing "Formula 1" share feeds and analyses. */
+export const customTopics = pgTable("custom_topics", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  /** Search phrase used for the Google News feed */
+  query: text("query").notNull(),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const preferences = pgTable("preferences", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -139,7 +154,7 @@ export const preferences = pgTable("preferences", {
   /** One-time token for the t.me/<bot>?start=<token> connect link */
   telegramLinkToken: text("telegram_link_token").unique(),
   selectedTopics: jsonb("selected_topics")
-    .$type<TopicSlug[]>()
+    .$type<TopicKey[]>()
     .notNull()
     .default([]),
   minRelevanceScore: real("min_relevance_score").notNull().default(6),

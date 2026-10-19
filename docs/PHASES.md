@@ -53,3 +53,13 @@ All five phases are complete.
 - Collect/analyze cover the union of all followed topics
 - Telegram: per-user chat via deep link `/start <token>` (webhook in prod, `getUpdates` locally), `/stop` to unlink
 - Card-style digest: header + one photo card per story with a “Read article ↗” button
+
+## Phase 7 — Topics for anyone + public Discover
+
+- Curated catalog of 25 topics in 5 groups (Tech, Money, Sports, World & Science, Culture & Life), ~55 seed feeds
+- “Add any topic”: Groq suggests a Google News search feed, site feeds and subreddits; each one is fetched (SSRF-guarded, size/time limits) and parsed before it is offered
+- Custom topics (`c-<Label>` keys in `custom_topics`) are shared: a second reader typing the same topic reuses its feeds
+- Following a custom topic collects and analyzes its first stories in the background (`after()`)
+- Scoring is relevance to the feed topic first, so general stories in a niche feed stay out of the digest
+- Limits: 5 custom topics per reader, 4 feeds per topic, 15 discovery searches per hour
+- Public, read-only `/discover` (curated topics, last 7 days, analyzed stories) and `/discover/[id]`; signed-out `/` lands there

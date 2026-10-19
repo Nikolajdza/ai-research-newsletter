@@ -1,22 +1,30 @@
 "use server";
 
 import Parser from "rss-parser";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { refresh } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { TIMEZONES } from "@/lib/format";
-import { TOPIC_SLUGS } from "@/lib/topics";
+import { customTopicKey, isCustomTopic, isTopicSlug, TOPIC_SLUGS, topicMeta, type TopicKey } from "@/lib/topics";
 import { analyzeArticleById, analyzeUnanalyzedArticles } from "@/server/ai/analyze";
 import { requireAdmin, requireUser } from "@/server/auth/session";
 import { db } from "@/server/db/client";
-import { preferences, sources, userArticles, users } from "@/server/db/schema";
+import { customTopics, preferences, sources, userArticles, users } from "@/server/db/schema";
 import { sendDigestForUser } from "@/server/digest/send";
+import { discoverSources, type DiscoveryResult } from "@/server/discovery/discover";
+import { previewFeed } from "@/server/discovery/fetch-feed";
+import { collectFromEnabledSources } from "@/server/ingest/collect";
 import { runDailyPipeline } from "@/server/pipeline/daily";
 import { groqConfigured } from "@/server/pipeline/steps";
 import { getPreferences } from "@/server/queries";
 import { createTelegramLink, disconnectTelegram, pollTelegramUpdates } from "@/server/telegram-link";
 
 export type ActionResult = { ok: boolean; message: string; url?: string };
+
+const MAX_CUSTOM_TOPICS = 5;
+const MAX_FEEDS_PER_TOPIC = 4;
+const DISCOVER_PER_HOUR = 15;
 
 const idSchema = z.string().uuid();
 
@@ -61,7 +69,7 @@ export async function setFeedbackAction(articleId: string, value: "up" | "down" 
 }
 
 const preferencesSchema = z.object({
-  selectedTopics: z.array(z.enum(TOPIC_SLUGS)).min(1, "Pick at least one topic"),
+  selectedTopics: z.array(z.string().min(1).max(60)).min(1, "Pick at least one topic").max(40),
   minRelevanceScore: z.number().min(1).max(10),
   digestHourLocal: z.number().int().min(0).max(23),
   timezone: z.enum(TIMEZONES),
@@ -78,13 +86,137 @@ export async function savePreferencesAction(input: PreferencesInput): Promise<Ac
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid preferences" };
   }
+  const selectedTopics = await knownTopics(parsed.data.selectedTopics);
+  if (selectedTopics.length === 0) return { ok: false, message: "Pick at least one topic" };
   await getPreferences(user.id);
   await db
     .update(preferences)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...parsed.data, selectedTopics, updatedAt: new Date() })
     .where(eq(preferences.userId, user.id));
   refresh();
   return { ok: true, message: "Preferences saved" };
+}
+
+/** Keeps curated slugs and custom keys that exist in custom_topics; drops anything else. */
+async function knownTopics(keys: string[]): Promise<TopicKey[]> {
+  const unique = [...new Set(keys)];
+  const custom = unique.filter(isCustomTopic);
+  const existing = custom.length
+    ? new Set((await db.select({ key: customTopics.key }).from(customTopics).where(inArray(customTopics.key, custom))).map((r) => r.key))
+    : new Set<string>();
+  return unique.filter((k) => isTopicSlug(k) || existing.has(k));
+}
+
+async function setFollowed(userId: string, update: (current: TopicKey[]) => TopicKey[]) {
+  const prefs = await getPreferences(userId);
+  const next = [...new Set(update(prefs.selectedTopics))];
+  await db.update(preferences).set({ selectedTopics: next, updatedAt: new Date() }).where(eq(preferences.userId, userId));
+  return next;
+}
+
+const discoverCalls = new Map<string, number[]>();
+
+export async function discoverTopicAction(
+  input: string,
+): Promise<{ ok: true; result: DiscoveryResult } | { ok: false; message: string }> {
+  const user = await requireUser();
+  const text = z.string().trim().min(2, "Type at least 2 characters").max(200).safeParse(input);
+  if (!text.success) return { ok: false, message: text.error.issues[0]?.message ?? "Invalid topic" };
+
+  const now = Date.now();
+  const recent = (discoverCalls.get(user.id) ?? []).filter((t) => now - t < 60 * 60 * 1000);
+  if (recent.length >= DISCOVER_PER_HOUR) return { ok: false, message: "Too many searches — try again in a little while." };
+  discoverCalls.set(user.id, [...recent, now]);
+
+  try {
+    const result = await discoverSources(text.data);
+    if (!result.curatedMatch && result.candidates.length === 0) {
+      return { ok: false, message: "No working news feeds found for that. Try a broader or different phrase." };
+    }
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function followTopicAction(key: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const [known] = await knownTopics([key]);
+  if (!known) return { ok: false, message: "Unknown topic" };
+  await setFollowed(user.id, (current) => [...current, known]);
+  refresh();
+  return { ok: true, message: `Following ${topicMeta(known).label}` };
+}
+
+export async function unfollowTopicAction(key: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const next = await setFollowed(user.id, (current) => current.filter((k) => k !== key));
+  if (next.length === 0) await setFollowed(user.id, () => [key]);
+  refresh();
+  return next.length === 0
+    ? { ok: false, message: "Keep at least one topic" }
+    : { ok: true, message: `Stopped following ${topicMeta(key).label}` };
+}
+
+const followCustomSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  query: z.string().trim().min(1).max(80),
+  feeds: z.array(z.object({ name: z.string().trim().min(1).max(80), feedUrl: z.string().url() })).min(1).max(MAX_FEEDS_PER_TOPIC),
+});
+
+export async function followCustomTopicAction(input: z.input<typeof followCustomSchema>): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = followCustomSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Pick at least one source" };
+  const { query, feeds } = parsed.data;
+  const stored = await db
+    .select({ feedUrl: sources.feedUrl, topic: sources.topic })
+    .from(sources)
+    .where(inArray(sources.feedUrl, feeds.map((f) => f.feedUrl)));
+  const adoptedKey = stored.find((s) => isCustomTopic(s.topic))?.topic;
+  const [adopted] = adoptedKey
+    ? await db.select({ label: customTopics.label }).from(customTopics).where(eq(customTopics.key, adoptedKey))
+    : [];
+  const label = adopted?.label ?? parsed.data.label;
+  const key = adoptedKey ?? customTopicKey(label);
+  const storedTopic = new Map(stored.map((s) => [s.feedUrl, s.topic]));
+
+  const prefs = await getPreferences(user.id);
+  const customCount = prefs.selectedTopics.filter(isCustomTopic).length;
+  if (!prefs.selectedTopics.includes(key) && customCount >= MAX_CUSTOM_TOPICS) {
+    return { ok: false, message: `You can follow up to ${MAX_CUSTOM_TOPICS} custom topics. Remove one first.` };
+  }
+
+  const alreadyHere = feeds.filter((f) => storedTopic.get(f.feedUrl) === key);
+  const fresh = feeds.filter((f) => !storedTopic.has(f.feedUrl));
+  const verified = await Promise.allSettled(fresh.map(async (f) => ({ ...f, preview: await previewFeed(f.feedUrl) })));
+  const usable = verified.flatMap((v) => (v.status === "fulfilled" ? [v.value] : []));
+  if (usable.length + alreadyHere.length === 0) {
+    return { ok: false, message: "None of the selected feeds could be read right now." };
+  }
+
+  await db.insert(customTopics).values({ key, label, query, createdByUserId: user.id }).onConflictDoNothing({ target: customTopics.key });
+  if (usable.length > 0) {
+    await db
+      .insert(sources)
+      .values(
+        usable.map((f) => ({ name: f.name, feedUrl: f.feedUrl, siteUrl: f.preview.siteUrl, topic: key, addedByUserId: user.id })),
+      )
+      .onConflictDoNothing({ target: sources.feedUrl });
+  }
+  const sourceCount = usable.length + alreadyHere.length;
+  await setFollowed(user.id, (current) => [...current, key]);
+
+  after(async () => {
+    await collectFromEnabledSources({ topics: [key] });
+    if (groqConfigured()) await analyzeUnanalyzedArticles({ limit: 6, topics: [key] });
+  });
+
+  refresh();
+  return {
+    ok: true,
+    message: `Following ${label} with ${sourceCount} source${sourceCount === 1 ? "" : "s"}. First stories appear in about a minute.`,
+  };
 }
 
 export async function updateDisplayNameAction(name: string): Promise<ActionResult> {

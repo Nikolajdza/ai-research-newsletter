@@ -8,8 +8,8 @@ import { ActionButton } from "@/components/ui/action-button";
 import { EmptyState, PageHeader, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
 import { requireUser } from "@/server/auth/session";
-import { isTopicSlug, TOPIC_SLUGS, TOPICS, type TopicSlug } from "@/lib/topics";
-import { listArticles } from "@/server/queries";
+import { isTopicSlug, topicMeta, type TopicKey } from "@/lib/topics";
+import { getPreferences, listArticles } from "@/server/queries";
 
 export const metadata = { title: "Explore" };
 
@@ -17,18 +17,18 @@ const PAGE_SIZE = 24;
 
 type Filters = {
   q: string;
-  topic?: TopicSlug;
+  topic?: TopicKey;
   min: number;
   sort: "score" | "recent";
   page: number;
 };
 
-function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
+function parseFilters(sp: Record<string, string | string[] | undefined>, followed: TopicKey[]): Filters {
   const get = (key: string) => (Array.isArray(sp[key]) ? sp[key]?.[0] : sp[key]) ?? "";
   const topic = get("topic");
   return {
     q: get("q").slice(0, 100),
-    topic: isTopicSlug(topic) ? topic : undefined,
+    topic: isTopicSlug(topic) || followed.includes(topic) ? topic : undefined,
     min: Math.min(Math.max(Number(get("min")) || 0, 0), 10),
     sort: get("sort") === "recent" ? "recent" : "score",
     page: Math.max(1, Number(get("page")) || 1),
@@ -52,7 +52,7 @@ export default function ArticlesPage(props: PageProps<"/articles">) {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Explore"
-        subtitle="Browse every collected article. Scored ones show their AI relevance."
+        subtitle="Browse collected articles across the catalog and your own topics. Scored ones show their AI relevance."
         actions={
           <Suspense fallback={null}>
             <AnalyzeMoreButton />
@@ -79,8 +79,13 @@ async function AnalyzeMoreButton() {
 async function Results({ searchParams }: Pick<PageProps<"/articles">, "searchParams">) {
   await connection();
   const user = await requireUser();
-  const filters = parseFilters(await searchParams);
+  const prefs = await getPreferences(user.id);
+  const filters = parseFilters(await searchParams, prefs.selectedTopics);
   const now = requestNow();
+  const chips = [
+    ...prefs.selectedTopics,
+    ...(filters.topic && !prefs.selectedTopics.includes(filters.topic) ? [filters.topic] : []),
+  ];
   const { items, total } = await listArticles(user.id, {
     q: filters.q,
     topic: filters.topic,
@@ -134,9 +139,9 @@ async function Results({ searchParams }: Pick<PageProps<"/articles">, "searchPar
         <Link href={hrefWith(filters, { topic: undefined })} className={chip(!filters.topic)}>
           All topics
         </Link>
-        {TOPIC_SLUGS.map((t) => (
+        {chips.map((t) => (
           <Link key={t} href={hrefWith(filters, { topic: t })} className={chip(filters.topic === t)}>
-            {TOPICS[t].label}
+            {topicMeta(t).label}
           </Link>
         ))}
       </div>

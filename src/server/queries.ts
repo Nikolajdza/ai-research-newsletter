@@ -11,18 +11,19 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { DEFAULT_TOPICS } from "@/lib/topics";
+import { CUSTOM_TOPIC_PREFIX, DEFAULT_TOPICS, isCustomTopic } from "@/lib/topics";
 import { db } from "./db/client";
 import {
   articleAnalyses,
   articles,
+  customTopics,
   digests,
   ingestRuns,
   preferences,
   sources,
   userArticles,
   workflowRuns,
-  type TopicSlug,
+  type TopicKey,
 } from "./db/schema";
 import { getTotalCostUsd } from "./ai/analyze";
 import { telegramBotConfigured } from "./digest/telegram";
@@ -37,7 +38,7 @@ export type ArticleListItem = {
   url: string;
   excerpt: string | null;
   imageUrl: string | null;
-  topic: TopicSlug;
+  topic: TopicKey;
   sourceName: string;
   publishedAt: Date | null;
   fetchedAt: Date;
@@ -182,7 +183,7 @@ export async function listRecentlyAnalyzed(userId: string, limit = 6): Promise<A
 
 export type ArticleFilters = {
   q?: string;
-  topic?: TopicSlug;
+  topic?: TopicKey;
   minScore?: number;
   analyzedOnly?: boolean;
   sort?: "score" | "recent";
@@ -190,9 +191,19 @@ export type ArticleFilters = {
   offset?: number;
 };
 
+const curatedOnly = sql`${articles.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`;
+
+/** Curated topics plus the reader's own custom topics; other readers' niche topics stay out of Explore. */
+function visibleTo(followed: TopicKey[]) {
+  const own = followed.filter(isCustomTopic);
+  return own.length ? or(curatedOnly, inArray(articles.topic, own)) : curatedOnly;
+}
+
 export async function listArticles(userId: string, filters: ArticleFilters) {
   const q = filters.q?.trim();
+  const prefs = await getPreferences(userId);
   const where = and(
+    visibleTo(prefs.selectedTopics),
     q
       ? or(
           ilike(articles.title, `%${q}%`),
@@ -263,7 +274,7 @@ export async function getArticle(userId: string, id: string) {
   };
 }
 
-export async function getRelatedArticles(userId: string, id: string, topic: TopicSlug, limit = 3) {
+export async function getRelatedArticles(userId: string, id: string, topic: TopicKey, limit = 3) {
   const rows = await articleQuery(
     userId,
     and(eq(articles.topic, topic), ne(articles.id, id), isNotNull(articleAnalyses.relevanceScore)),
@@ -289,7 +300,14 @@ export async function getArticlesByIds(userId: string, ids: string[]): Promise<A
   return ids.map((id) => byId.get(id)).filter((a): a is ArticleListItem => Boolean(a));
 }
 
-export async function listSourcesWithStats() {
+/** All sources for the admin; pass a reader's topics to hide other readers' custom feeds. */
+export async function listSourcesWithStats(followed?: TopicKey[]) {
+  const own = followed?.filter(isCustomTopic) ?? [];
+  const where = followed
+    ? own.length
+      ? or(sql`${sources.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`, inArray(sources.topic, own))
+      : sql`${sources.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`
+    : undefined;
   return db
     .select({
       id: sources.id,
@@ -303,8 +321,104 @@ export async function listSourcesWithStats() {
     })
     .from(sources)
     .leftJoin(articles, eq(articles.sourceId, sources.id))
+    .where(where)
     .groupBy(sources.id)
     .orderBy(sources.topic, sources.name);
+}
+
+export async function listCustomTopics(keys: TopicKey[]) {
+  const custom = keys.filter(isCustomTopic);
+  if (custom.length === 0) return [];
+  return db
+    .select({ key: customTopics.key, label: customTopics.label })
+    .from(customTopics)
+    .where(inArray(customTopics.key, custom))
+    .orderBy(customTopics.label);
+}
+
+export type PublicArticle = Omit<ArticleListItem, "savedAt" | "feedback">;
+
+const publicSelect = {
+  id: articles.id,
+  title: articles.title,
+  url: articles.url,
+  excerpt: articles.excerpt,
+  imageUrl: articles.imageUrl,
+  topic: articles.topic,
+  sourceName: sources.name,
+  publishedAt: articles.publishedAt,
+  fetchedAt: articles.fetchedAt,
+  summary: articleAnalyses.summary,
+  relevanceScore: articleAnalyses.relevanceScore,
+  tags: articleAnalyses.topics,
+};
+
+/** Signed-out feed: analyzed stories from the curated catalog only. */
+export async function listPublicArticles(filters: { topic?: TopicKey; limit: number; offset: number }) {
+  const where = and(
+    curatedOnly,
+    isNotNull(articleAnalyses.relevanceScore),
+    filters.topic ? eq(articles.topic, filters.topic) : undefined,
+    gte(articles.fetchedAt, new Date(Date.now() - 7 * DAY_MS)),
+  );
+  const [rows, total] = await Promise.all([
+    db
+      .select(publicSelect)
+      .from(articles)
+      .innerJoin(sources, eq(articles.sourceId, sources.id))
+      .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+      .where(where)
+      .orderBy(desc(articleAnalyses.relevanceScore), desc(recency))
+      .limit(filters.limit)
+      .offset(filters.offset),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(articles)
+      .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+      .where(where)
+      .then((r) => r[0]?.n ?? 0),
+  ]);
+  return { items: rows.map((r): PublicArticle => ({ ...r, tags: r.tags ?? [] })), total };
+}
+
+/** Catalog topics that have analyzed stories this week, busiest first. */
+export async function listPublicTopics(): Promise<TopicKey[]> {
+  const rows = await db
+    .select({ topic: articles.topic, n: sql<number>`count(*)::int` })
+    .from(articles)
+    .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .where(and(curatedOnly, gte(articles.fetchedAt, new Date(Date.now() - 7 * DAY_MS))))
+    .groupBy(articles.topic)
+    .orderBy(desc(sql`count(*)`));
+  return rows.map((r) => r.topic);
+}
+
+export async function getPublicArticle(id: string) {
+  if (!UUID_RE.test(id)) return null;
+  const [row] = await db
+    .select({
+      ...publicSelect,
+      siteUrl: sources.siteUrl,
+      whyItMatters: articleAnalyses.whyItMatters,
+      keyTakeaways: articleAnalyses.keyTakeaways,
+    })
+    .from(articles)
+    .innerJoin(sources, eq(articles.sourceId, sources.id))
+    .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .where(and(eq(articles.id, id), curatedOnly))
+    .limit(1);
+  if (!row) return null;
+  return { ...row, tags: row.tags ?? [], keyTakeaways: row.keyTakeaways ?? [] };
+}
+
+export async function getPublicStats() {
+  const since = new Date(Date.now() - DAY_MS);
+  const [articlesToday, analyzedToday, sourceCount] = await Promise.all([
+    db.$count(articles, gte(articles.fetchedAt, since)),
+    db.$count(articleAnalyses, gte(articleAnalyses.analyzedAt, since)),
+    db.$count(sources, and(eq(sources.enabled, true), sql`${sources.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`)),
+  ]);
+  return { articlesToday, analyzedToday, sourceCount };
 }
 
 export async function listWorkflowRuns(limit = 12) {

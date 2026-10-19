@@ -6,8 +6,11 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     <div className="flex min-h-screen flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5">
         <Brand />
-        <nav className="flex items-center gap-2 text-sm">
-          <Link href="/how-it-works" className="rounded-xl px-3 py-2 text-muted hover:text-foreground">
+        <nav className="flex items-center gap-1 text-sm sm:gap-2">
+          <Link href="/discover" className="rounded-xl px-2.5 py-2 text-muted hover:text-foreground sm:px-3">
+            Discover
+          </Link>
+          <Link href="/how-it-works" className="hidden rounded-xl px-3 py-2 text-muted hover:text-foreground sm:block">
             How it works
           </Link>
           <Link href="/login" className="rounded-xl px-3 py-2 text-muted hover:text-foreground">

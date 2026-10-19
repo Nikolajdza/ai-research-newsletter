@@ -5,7 +5,7 @@ import {
   articles,
   ingestRuns,
   sources,
-  type TopicSlug,
+  type TopicKey,
 } from "../db/schema";
 import { getFollowedTopics } from "../followed-topics";
 import { normalizeRssItem, type NormalizedArticle, type RawFeedItem } from "./normalize";
@@ -87,6 +87,8 @@ async function collectSource(source: SourceRow) {
 export async function collectFromEnabledSources(options?: {
   /** If true, only sources whose topic at least one user follows */
   respectPreferences?: boolean;
+  /** Collect only these topics (e.g. right after a reader adds one) */
+  topics?: TopicKey[];
 }): Promise<CollectResult> {
   const respectPreferences = options?.respectPreferences ?? true;
 
@@ -102,8 +104,8 @@ export async function collectFromEnabledSources(options?: {
   let articlesSkipped = 0;
 
   try {
-    let topicFilter: TopicSlug[] | null = null;
-    if (respectPreferences) {
+    let topicFilter: TopicKey[] | null = options?.topics ?? null;
+    if (!topicFilter && respectPreferences) {
       topicFilter = await getFollowedTopics();
     }
 

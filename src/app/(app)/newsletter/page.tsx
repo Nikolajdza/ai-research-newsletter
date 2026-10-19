@@ -9,7 +9,7 @@ import { StatusBadge, TopicChip } from "@/components/ui/badges";
 import { EmptyState, PageSkeleton } from "@/components/ui/layout";
 import { Thumb } from "@/components/ui/thumb";
 import { formatDate, formatHour, formatTime, requestNow } from "@/lib/format";
-import { TOPICS } from "@/lib/topics";
+import { topicMeta } from "@/lib/topics";
 import { requireUser } from "@/server/auth/session";
 import { selectDigestItems } from "@/server/digest/select";
 import { telegramBotConfigured } from "@/server/digest/telegram";
@@ -27,7 +27,7 @@ function TelegramPreview({ digestDate, items }: { digestDate: string; items: Art
         </p>
       </div>
       {items.map((item, i) => {
-        const topic = TOPICS[item.topic];
+        const topic = topicMeta(item.topic);
         return (
           <div key={item.id} className="overflow-hidden rounded-2xl rounded-tl-sm bg-[#182533]">
             {item.imageUrl && <Thumb imageUrl={item.imageUrl} topic={item.topic} className="aspect-[16/9] w-full" />}

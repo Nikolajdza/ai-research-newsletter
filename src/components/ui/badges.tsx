@@ -1,4 +1,4 @@
-import { TOPICS, type TopicSlug } from "@/lib/topics";
+import { topicMeta, type TopicKey } from "@/lib/topics";
 
 export function ScorePill({
   score,
@@ -29,13 +29,11 @@ export function ScorePill({
   );
 }
 
-export function TopicChip({ topic, className = "" }: { topic: TopicSlug; className?: string }) {
-  const meta = TOPICS[topic];
+export function TopicChip({ topic, className = "" }: { topic: TopicKey; className?: string }) {
+  const meta = topicMeta(topic);
   return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${meta?.chip ?? "bg-white/5 text-muted ring-white/10"} ${className}`}
-    >
-      {meta?.label ?? topic}
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${meta.chip} ${className}`}>
+      {meta.label}
     </span>
   );
 }
