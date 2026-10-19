@@ -18,8 +18,10 @@ function createDb(): Db {
   const client =
     globalForDb.postgresClient ??
     postgres(connectionString, {
-      max: 10,
+      // Serverless (Vercel) should use Supabase's transaction pooler and a single connection.
+      max: process.env.VERCEL ? 1 : 10,
       prepare: false,
+      ssl: process.env.DATABASE_URL?.includes("supabase.co") ? "require" : undefined,
     });
 
   if (process.env.NODE_ENV !== "production") {

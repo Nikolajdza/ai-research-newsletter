@@ -18,6 +18,8 @@ export async function runDailyPipeline(options?: {
   skipAnalyze?: boolean;
   forceDigest?: boolean;
   dryRunDigest?: boolean;
+  /** Defaults to true only for trigger "schedule" (hourly n8n). Vercel Hobby cron is once a day. */
+  respectSchedule?: boolean;
 }): Promise<DailyPipelineResult> {
   const trigger = options?.trigger ?? "api";
   const run = await startRun(trigger);
@@ -27,7 +29,7 @@ export async function runDailyPipeline(options?: {
   await runDigestStep(run.id, {
     force: options?.forceDigest,
     dryRun: options?.dryRunDigest,
-    respectSchedule: respectsSchedule(trigger),
+    respectSchedule: options?.respectSchedule ?? respectsSchedule(trigger),
   });
 
   await finishRun(run.id);

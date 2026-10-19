@@ -6,7 +6,7 @@ Manual Trigger ─▶ Start Run (manual) ─┐
 Schedule (hourly) ─▶ Start Run (schedule) ┘
 ```
 
-n8n is the orchestrator; the work happens in the Next.js API so it stays typed, tested and reusable from the dashboard and CLI.
+n8n is the **local** orchestrator. Production uses Vercel Cron (`GET /api/pipeline/daily` once a day) — see [docs/HOSTING.md](../docs/HOSTING.md). The work always happens in the Next.js API so it stays typed, tested and reusable from the dashboard and CLI.
 
 | Node | Endpoint | Notes |
 |------|----------|-------|

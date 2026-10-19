@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
 
-/** Shared secret for n8n → Next.js pipeline routes. */
+function bearerToken(request: Request): string | null {
+  const value = request.headers.get("authorization");
+  if (!value?.toLowerCase().startsWith("bearer ")) return null;
+  return value.slice(7).trim() || null;
+}
+
+/** Vercel Cron sends GET with `Authorization: Bearer $CRON_SECRET`. */
+export function isVercelCron(request: Request): boolean {
+  const secret = process.env.CRON_SECRET?.trim();
+  const token = bearerToken(request);
+  return Boolean(secret && token && token === secret);
+}
+
+/** Shared secret for n8n / curl → Next.js pipeline routes. Vercel Cron is also allowed. */
 export function assertPipelineSecret(request: Request): NextResponse | null {
+  if (isVercelCron(request)) return null;
+
   const secret = process.env.INGEST_SECRET;
   if (!secret) return null;
 

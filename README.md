@@ -1,6 +1,6 @@
 # InsightLoop — AI Research & Newsletter
 
-Multi-topic RSS (25 curated topics from AI to Formula 1, plus anything a reader types) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally, browsable in a Next.js dashboard with accounts and a public Discover page.
+Multi-topic RSS (25 curated topics from AI to Formula 1, plus anything a reader types) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally (Vercel Cron in production), browsable in a Next.js dashboard with accounts and a public Discover page.
 
 **Demo flow:** browse `/discover` → sign up → pick 3+ topics on `/welcome` or type your own (“Elden Ring”, “Partizan košarka”) → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
 
@@ -94,10 +94,11 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Hosting](docs/HOSTING.md) — Vercel + Supabase + daily Cron ($0)
 - [Phases](docs/PHASES.md)
 - [UX](docs/UX_REFERENCE.md)
 - [n8n](n8n/README.md)
 
 ## Status
 
-**Phases 1–7 complete** (6 = accounts, personalization, card-style Telegram digest; 7 = 25-topic catalog, add-any-topic discovery, public Discover). Next: free hosting on Vercel + Supabase + Vercel Cron. Out of scope for now: autonomous agents, RAG / vector DB, WebSockets, email blasts, login-walled scraping.
+**Phases 1–8** (8 = Vercel + Supabase + daily Cron). Local Docker + n8n still work. Out of scope for now: autonomous agents, RAG / vector DB, WebSockets, email blasts, login-walled scraping.

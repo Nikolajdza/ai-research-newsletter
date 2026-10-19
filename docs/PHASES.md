@@ -64,3 +64,10 @@ All five phases are complete.
 - Limits: 5 custom topics per reader, 4 feeds per topic, 15 discovery searches per hour
 - `/welcome` onboarding after sign-up: pick at least 3 topics (World preselected) or type your own; finishing collects and analyzes those topics in the background. Unfinished accounts are sent there from any app page (`preferences.onboarded_at`)
 - Public, read-only `/discover` (curated topics, last 7 days, analyzed stories) and `/discover/[id]`; signed-out `/` lands there
+
+## Phase 8 — Free hosting
+
+- Production: Vercel Hobby + Supabase Postgres + Vercel Cron (Hobby = once per day)
+- `GET /api/pipeline/daily` from Cron (`Authorization: Bearer CRON_SECRET`) at 05:00 UTC; sends every reader’s digest (no hourly wait)
+- Serverless DB client: one connection, `prepare: false`, SSL for Supabase
+- Step-by-step: [HOSTING.md](HOSTING.md)

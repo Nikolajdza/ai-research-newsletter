@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { assertPipelineSecret } from "@/lib/pipeline-auth";
+import { assertPipelineSecret, isVercelCron } from "@/lib/pipeline-auth";
 import { runDailyPipeline } from "@/server/pipeline/daily";
 
+/** Hobby cron can run up to 5 minutes (Fluid compute default). */
+export const maxDuration = 300;
+
 /**
- * n8n entrypoint: collect → analyze → digest (idempotent).
+ * n8n / dashboard / CLI entrypoint: collect → analyze → digest (idempotent).
+ * Vercel Cron hits GET once a day (Hobby cannot schedule hourly).
  */
 export async function POST(request: Request) {
   const denied = assertPipelineSecret(request);
@@ -56,9 +60,27 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    hint: "POST to run collect → analyze → digest. Optional x-ingest-secret header.",
-  });
+export async function GET(request: Request) {
+  if (!isVercelCron(request)) {
+    return NextResponse.json({
+      ok: true,
+      hint: "POST with x-ingest-secret, or GET from Vercel Cron (Authorization: Bearer CRON_SECRET).",
+    });
+  }
+
+  try {
+    // Hobby cron is once per day, so do not wait for each reader's preferred hour.
+    const result = await runDailyPipeline({
+      trigger: "schedule",
+      analyzeLimit: 20,
+      respectSchedule: false,
+    });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("scheduled pipeline failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : "Pipeline failed" },
+      { status: 500 },
+    );
+  }
 }

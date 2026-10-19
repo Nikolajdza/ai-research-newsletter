@@ -26,9 +26,10 @@ Each RSS source maps to one primary topic. Ingest respects `preferences.selected
 
 | Piece | Role | Phase |
 |-------|------|-------|
-| Next.js | Dashboard + API routes that pipeline/n8n call | 1+ |
-| Postgres | Sources, articles, analyses, prefs, ingest runs (`:5433`) | 1–2 |
-| n8n (Docker) | Schedules, orchestration, retries, Telegram (`:5679`) | 1 setup, 4 wire-up |
+| Next.js | Dashboard + API routes that pipeline / Cron / n8n call | 1+ |
+| Postgres | Sources, articles, analyses, prefs, ingest runs (Docker `:5433` locally; Supabase in prod) | 1–2 |
+| n8n (Docker) | Local hourly schedule (`:5679`) | 1 setup, 4 wire-up |
+| Vercel Cron | Production daily run (`GET /api/pipeline/daily` at 05:00 UTC) | 8 |
 | Groq (or similar) | Structured article analysis | 3 |
 | Telegram Bot | Daily digest delivery | 4 |
 
