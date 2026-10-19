@@ -3,7 +3,7 @@
 import { Check, Globe2, Loader2, MessageSquare, Newspaper, Plus, Search, Sparkles } from "lucide-react";
 import { useState, useTransition } from "react";
 import { discoverTopicAction, followCustomTopicAction, followTopicAction, type ActionResult } from "@/app/actions";
-import { TOPICS } from "@/lib/topics";
+import { TOPICS, type TopicSlug } from "@/lib/topics";
 import type { DiscoveryResult, SourceKind } from "@/server/discovery/discover";
 
 const KIND: Record<SourceKind, { label: string; icon: typeof Globe2 }> = {
@@ -14,7 +14,16 @@ const KIND: Record<SourceKind, { label: string; icon: typeof Globe2 }> = {
 
 const EXAMPLES = ["Formula 1", "Elden Ring", "Real Madrid", "Electric bikes", "Taylor Swift", "Rust language"];
 
-export function TopicDiscovery({ followed }: { followed: string[] }) {
+export function TopicDiscovery({
+  followed,
+  onCuratedMatch,
+  title = "Add any topic",
+}: {
+  followed: string[];
+  /** When set, a catalog match is handed back instead of being followed right away. */
+  onCuratedMatch?: (slug: TopicSlug) => void;
+  title?: string;
+}) {
   const [query, setQuery] = useState("");
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
   const [label, setLabel] = useState("");
@@ -57,19 +66,26 @@ export function TopicDiscovery({ followed }: { followed: string[] }) {
       }
     });
 
-  const followCurated = (slug: string) =>
+  const followCurated = (slug: TopicSlug) => {
+    if (onCuratedMatch) {
+      onCuratedMatch(slug);
+      setResult({ ok: true, message: `${TOPICS[slug].label} selected` });
+      setDiscovery(null);
+      return;
+    }
     startFollow(async () => {
       const r = await followTopicAction(slug);
       setResult(r);
       if (r.ok) setDiscovery(null);
     });
+  };
 
   const match = discovery?.curatedMatch;
 
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold">
-        <Sparkles className="h-4 w-4 text-accent" /> Add any topic
+        <Sparkles className="h-4 w-4 text-accent" /> {title}
       </h2>
       <p className="mt-1 text-sm text-muted">
         Type anything — a team, a game, a hobby, a company. AI looks for real news feeds, we check each one, and you pick

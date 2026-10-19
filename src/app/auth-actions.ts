@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { DEFAULT_TOPICS } from "@/lib/topics";
+import { ONBOARDING_TOPICS } from "@/lib/topics";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { createSession, destroySession } from "@/server/auth/session";
 import { db } from "@/server/db/client";
@@ -43,13 +43,13 @@ export async function registerAction(_prev: AuthFormState, formData: FormData): 
 
   await db.insert(preferences).values({
     userId: user.id,
-    selectedTopics: [...DEFAULT_TOPICS],
+    selectedTopics: [...ONBOARDING_TOPICS],
     // Single-user installs configured a chat in .env before accounts existed; hand it to the owner.
     telegramChatId: isFirstUser ? process.env.TELEGRAM_CHAT_ID?.trim() || null : null,
   });
 
   await createSession(user.id);
-  redirect(safeNext(formData.get("next")));
+  redirect("/welcome");
 }
 
 export async function loginAction(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {

@@ -62,4 +62,5 @@ All five phases are complete.
 - Following a custom topic collects and analyzes its first stories in the background (`after()`)
 - Scoring is relevance to the feed topic first, so general stories in a niche feed stay out of the digest
 - Limits: 5 custom topics per reader, 4 feeds per topic, 15 discovery searches per hour
+- `/welcome` onboarding after sign-up: pick at least 3 topics (World preselected) or type your own; finishing collects and analyzes those topics in the background. Unfinished accounts are sent there from any app page (`preferences.onboarded_at`)
 - Public, read-only `/discover` (curated topics, last 7 days, analyzed stories) and `/discover/[id]`; signed-out `/` lands there

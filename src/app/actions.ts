@@ -6,7 +6,16 @@ import { refresh } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { TIMEZONES } from "@/lib/format";
-import { customTopicKey, isCustomTopic, isTopicSlug, TOPIC_SLUGS, topicMeta, type TopicKey } from "@/lib/topics";
+import { redirect } from "next/navigation";
+import {
+  customTopicKey,
+  isCustomTopic,
+  isTopicSlug,
+  MIN_ONBOARDING_TOPICS,
+  TOPIC_SLUGS,
+  topicMeta,
+  type TopicKey,
+} from "@/lib/topics";
 import { analyzeArticleById, analyzeUnanalyzedArticles } from "@/server/ai/analyze";
 import { requireAdmin, requireUser } from "@/server/auth/session";
 import { db } from "@/server/db/client";
@@ -156,6 +165,27 @@ export async function unfollowTopicAction(key: string): Promise<ActionResult> {
   return next.length === 0
     ? { ok: false, message: "Keep at least one topic" }
     : { ok: true, message: `Stopped following ${topicMeta(key).label}` };
+}
+
+/** Saves the /welcome picks (custom topics already followed there are kept) and builds the first feed. */
+export async function finishOnboardingAction(curated: string[]): Promise<ActionResult> {
+  const user = await requireUser();
+  const prefs = await getPreferences(user.id);
+  const picked = (await knownTopics(curated)).filter(isTopicSlug);
+  const selectedTopics = [...new Set([...picked, ...prefs.selectedTopics.filter(isCustomTopic)])];
+  if (selectedTopics.length < MIN_ONBOARDING_TOPICS) {
+    return { ok: false, message: `Pick at least ${MIN_ONBOARDING_TOPICS} topics` };
+  }
+  await db
+    .update(preferences)
+    .set({ selectedTopics, onboardedAt: new Date(), updatedAt: new Date() })
+    .where(eq(preferences.userId, user.id));
+
+  after(async () => {
+    await collectFromEnabledSources({ topics: selectedTopics });
+    if (groqConfigured()) await analyzeUnanalyzedArticles({ limit: 12, topics: selectedTopics });
+  });
+  redirect("/");
 }
 
 const followCustomSchema = z.object({

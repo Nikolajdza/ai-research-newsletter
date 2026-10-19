@@ -163,6 +163,8 @@ export const preferences = pgTable("preferences", {
   digestFormat: text("digest_format").notNull().default("detailed"),
   telegramEnabled: boolean("telegram_enabled").notNull().default(true),
   emailEnabled: boolean("email_enabled").notNull().default(false),
+  /** Null until the reader finishes /welcome. */
+  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

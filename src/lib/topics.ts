@@ -37,6 +37,11 @@ export const CUSTOM_TOPIC_PREFIX = "c-";
 /** Starting topics for a new account. */
 export const DEFAULT_TOPICS: readonly TopicSlug[] = ["ai-ml", "web-dev", "business", "sports", "world", "science"];
 
+/** Preselected on /welcome so every new feed has general world news. */
+export const ONBOARDING_TOPICS: readonly TopicSlug[] = ["world"];
+
+export const MIN_ONBOARDING_TOPICS = 3;
+
 export const TOPIC_GROUPS = ["Tech", "Money", "Sports", "World & Science", "Culture & Life"] as const;
 export type TopicGroup = (typeof TOPIC_GROUPS)[number] | "Your topics";
 

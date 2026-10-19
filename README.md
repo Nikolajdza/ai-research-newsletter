@@ -2,7 +2,7 @@
 
 Multi-topic RSS (25 curated topics from AI to Formula 1, plus anything a reader types) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally, browsable in a Next.js dashboard with accounts and a public Discover page.
 
-**Demo flow:** browse `/discover` → sign up → pick topics or type your own (“Elden Ring”, “Partizan košarka”) → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
+**Demo flow:** browse `/discover` → sign up → pick 3+ topics on `/welcome` or type your own (“Elden Ring”, “Partizan košarka”) → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
 
 ## Quick start
 
@@ -38,6 +38,7 @@ The first account you register becomes the **admin** (manages sources, runs the 
 
 | Page | What it shows |
 |------|---------------|
+| `/welcome` | First-run topic picker: catalog cards by group (World preselected), “type anything” discovery, min 3 topics → builds the first feed |
 | `/discover` | Public, read-only: this week's best analyzed stories across curated topics, topic chips, stats |
 | `/discover/[id]` | Public story view: summary, why it matters, takeaways, link to source |
 | `/how-it-works` | Public explainer and sign-up CTA |

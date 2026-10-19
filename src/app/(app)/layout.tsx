@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { MobileNav } from "@/components/shell/mobile-nav";
+import { OnboardingGate } from "@/components/shell/onboarding-gate";
 import { Sidebar, SidebarProfile } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 
@@ -20,6 +21,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <MobileNav />
+      <Suspense fallback={null}>
+        <OnboardingGate />
+      </Suspense>
     </>
   );
 }
