@@ -1,8 +1,8 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { loginAction, registerAction, type AuthFormState } from "@/app/auth-actions";
 
 const inputClass =
@@ -13,6 +13,7 @@ export function AuthForm({ mode, next }: { mode: "login" | "register"; next?: st
     mode === "login" ? loginAction : registerAction,
     undefined,
   );
+  const [showPassword, setShowPassword] = useState(false);
   const isRegister = mode === "register";
 
   return (
@@ -30,15 +31,25 @@ export function AuthForm({ mode, next }: { mode: "login" | "register"; next?: st
       </label>
       <label className="block text-xs text-muted">
         Password
-        <input
-          name="password"
-          type="password"
-          required
-          minLength={isRegister ? 8 : undefined}
-          autoComplete={isRegister ? "new-password" : "current-password"}
-          className={inputClass}
-          placeholder={isRegister ? "At least 8 characters" : "••••••••"}
-        />
+        <span className="relative mt-1 block">
+          <input
+            name="password"
+            type={showPassword ? "text" : "password"}
+            required
+            minLength={isRegister ? 8 : undefined}
+            autoComplete={isRegister ? "new-password" : "current-password"}
+            className={`${inputClass} mt-0 pr-11`}
+            placeholder={isRegister ? "At least 8 characters" : "••••••••"}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute top-1/2 right-2.5 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-white/5 hover:text-foreground"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </span>
       </label>
 
       {state?.error && (

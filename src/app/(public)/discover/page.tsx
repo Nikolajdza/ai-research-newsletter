@@ -43,11 +43,9 @@ async function Feed({ searchParams }: Pick<PageProps<"/discover">, "searchParams
   const page = Math.max(1, Number(get("page")) || 1);
   const now = requestNow();
 
-  const [{ items, total }, topics, stats] = await Promise.all([
-    listPublicArticles({ topic, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
-    listPublicTopics(),
-    getPublicStats(),
-  ]);
+  const { items, total } = await listPublicArticles({ topic, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+  const topics = await listPublicTopics();
+  const stats = await getPublicStats();
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (patch: { topic?: string; page?: number }) => {
     const params = new URLSearchParams();

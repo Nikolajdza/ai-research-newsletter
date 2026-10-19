@@ -32,14 +32,13 @@ async function Dashboard() {
   const user = await requireUser();
   const isAdmin = user.role === "admin";
   const now = requestNow();
-  const [prefs, stats, highlights, latest, [lastRun], [lastDigest]] = await Promise.all([
-    getPreferences(user.id),
-    getDashboardStats(user.id),
-    getHighlights(user.id, 4),
-    listRecentlyAnalyzed(user.id, 6),
-    listWorkflowRuns(1),
-    listDigests(user.id, 1),
-  ]);
+  // Sequential DB access — parallel fan-out hangs on Supabase PgBouncer in warm isolates.
+  const prefs = await getPreferences(user.id);
+  const stats = await getDashboardStats(user.id);
+  const highlights = await getHighlights(user.id, 4);
+  const latest = await listRecentlyAnalyzed(user.id, 6);
+  const [lastRun] = await listWorkflowRuns(1);
+  const [lastDigest] = await listDigests(user.id, 1);
   const hour = localHour(prefs.timezone, now);
 
   return (

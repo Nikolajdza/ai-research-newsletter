@@ -98,21 +98,21 @@ export async function getDashboardStats(userId: string) {
   const since = new Date(Date.now() - DAY_MS);
   const weekAgo = new Date(Date.now() - 7 * DAY_MS);
 
-  const [total, newToday, analyzed, high, highToday, saved, newsletters] = await Promise.all([
-    db.$count(articles),
-    db.$count(articles, gte(articles.fetchedAt, since)),
-    db.$count(articleAnalyses),
-    db.$count(articleAnalyses, gte(articleAnalyses.relevanceScore, 8)),
-    db.$count(
-      articleAnalyses,
-      and(gte(articleAnalyses.relevanceScore, 8), gte(articleAnalyses.analyzedAt, since)),
-    ),
-    db.$count(userArticles, and(eq(userArticles.userId, userId), isNotNull(userArticles.savedAt))),
-    db.$count(
-      digests,
-      and(eq(digests.userId, userId), gte(digests.createdAt, weekAgo), inArray(digests.status, ["sent", "dry_run"])),
-    ),
-  ]);
+  // Sequential on purpose: parallel $count fan-out deadlocks on Supabase PgBouncer
+  // when the serverless pool is small / partially closed.
+  const total = await db.$count(articles);
+  const newToday = await db.$count(articles, gte(articles.fetchedAt, since));
+  const analyzed = await db.$count(articleAnalyses);
+  const high = await db.$count(articleAnalyses, gte(articleAnalyses.relevanceScore, 8));
+  const highToday = await db.$count(
+    articleAnalyses,
+    and(gte(articleAnalyses.relevanceScore, 8), gte(articleAnalyses.analyzedAt, since)),
+  );
+  const saved = await db.$count(userArticles, and(eq(userArticles.userId, userId), isNotNull(userArticles.savedAt)));
+  const newsletters = await db.$count(
+    digests,
+    and(eq(digests.userId, userId), gte(digests.createdAt, weekAgo), inArray(digests.status, ["sent", "dry_run"])),
+  );
 
   return { total, newToday, analyzed, high, highToday, saved, newsletters };
 }
@@ -222,18 +222,15 @@ export async function listArticles(userId: string, filters: ArticleFilters) {
       : [sql`${articleAnalyses.relevanceScore} desc nulls last`, desc(recency)];
 
   const limit = filters.limit ?? 24;
-  const [rows, total] = await Promise.all([
-    articleQuery(userId, where)
-      .orderBy(...order)
-      .limit(limit)
-      .offset(filters.offset ?? 0),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(articles)
-      .leftJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
-      .where(where)
-      .then((r) => r[0]?.n ?? 0),
-  ]);
+  const rows = await articleQuery(userId, where)
+    .orderBy(...order)
+    .limit(limit)
+    .offset(filters.offset ?? 0);
+  const [{ n: total } = { n: 0 }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(articles)
+    .leftJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .where(where);
 
   return { items: rows.map(toItem), total };
 }
@@ -361,23 +358,20 @@ export async function listPublicArticles(filters: { topic?: TopicKey; limit: num
     filters.topic ? eq(articles.topic, filters.topic) : undefined,
     gte(articles.fetchedAt, new Date(Date.now() - 7 * DAY_MS)),
   );
-  const [rows, total] = await Promise.all([
-    db
-      .select(publicSelect)
-      .from(articles)
-      .innerJoin(sources, eq(articles.sourceId, sources.id))
-      .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
-      .where(where)
-      .orderBy(desc(articleAnalyses.relevanceScore), desc(recency))
-      .limit(filters.limit)
-      .offset(filters.offset),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(articles)
-      .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
-      .where(where)
-      .then((r) => r[0]?.n ?? 0),
-  ]);
+  const rows = await db
+    .select(publicSelect)
+    .from(articles)
+    .innerJoin(sources, eq(articles.sourceId, sources.id))
+    .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .where(where)
+    .orderBy(desc(articleAnalyses.relevanceScore), desc(recency))
+    .limit(filters.limit)
+    .offset(filters.offset);
+  const [{ n: total } = { n: 0 }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(articles)
+    .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .where(where);
   return { items: rows.map((r): PublicArticle => ({ ...r, tags: r.tags ?? [] })), total };
 }
 
@@ -413,11 +407,12 @@ export async function getPublicArticle(id: string) {
 
 export async function getPublicStats() {
   const since = new Date(Date.now() - DAY_MS);
-  const [articlesToday, analyzedToday, sourceCount] = await Promise.all([
-    db.$count(articles, gte(articles.fetchedAt, since)),
-    db.$count(articleAnalyses, gte(articleAnalyses.analyzedAt, since)),
-    db.$count(sources, and(eq(sources.enabled, true), sql`${sources.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`)),
-  ]);
+  const articlesToday = await db.$count(articles, gte(articles.fetchedAt, since));
+  const analyzedToday = await db.$count(articleAnalyses, gte(articleAnalyses.analyzedAt, since));
+  const sourceCount = await db.$count(
+    sources,
+    and(eq(sources.enabled, true), sql`${sources.topic} not like ${`${CUSTOM_TOPIC_PREFIX}%`}`),
+  );
   return { articlesToday, analyzedToday, sourceCount };
 }
 
@@ -453,25 +448,21 @@ export async function getWeeklyActivity(): Promise<DayActivity[]> {
 }
 
 export async function getAiUsage() {
-  const [tokens, feedback, costUsd] = await Promise.all([
-    db
-      .select({
-        analyzed: sql<number>`count(*)::int`,
-        avgScore: sql<number>`coalesce(avg(${articleAnalyses.relevanceScore}), 0)::float`,
-        promptTokens: sql<number>`coalesce(sum(${articleAnalyses.promptTokens}), 0)::int`,
-        completionTokens: sql<number>`coalesce(sum(${articleAnalyses.completionTokens}), 0)::int`,
-      })
-      .from(articleAnalyses)
-      .then((r) => r[0]),
-    db
-      .select({
-        upvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'up')::int`,
-        downvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'down')::int`,
-      })
-      .from(userArticles)
-      .then((r) => r[0]),
-    getTotalCostUsd(),
-  ]);
+  const [tokens] = await db
+    .select({
+      analyzed: sql<number>`count(*)::int`,
+      avgScore: sql<number>`coalesce(avg(${articleAnalyses.relevanceScore}), 0)::float`,
+      promptTokens: sql<number>`coalesce(sum(${articleAnalyses.promptTokens}), 0)::int`,
+      completionTokens: sql<number>`coalesce(sum(${articleAnalyses.completionTokens}), 0)::int`,
+    })
+    .from(articleAnalyses);
+  const [feedback] = await db
+    .select({
+      upvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'up')::int`,
+      downvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'down')::int`,
+    })
+    .from(userArticles);
+  const costUsd = await getTotalCostUsd();
   return { ...tokens, ...feedback, costUsd };
 }
 

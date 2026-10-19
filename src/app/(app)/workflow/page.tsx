@@ -58,14 +58,12 @@ async function WorkflowMonitor() {
   await connection();
   const user = await requireUser();
   const now = requestNow();
-  const [runs, status, activity, usage, sources, prefs] = await Promise.all([
-    listWorkflowRuns(12),
-    getIntegrationStatus(),
-    getWeeklyActivity(),
-    getAiUsage(),
-    listSourcesWithStats(),
-    getPreferences(user.id),
-  ]);
+  const prefs = await getPreferences(user.id);
+  const runs = await listWorkflowRuns(12);
+  const status = await getIntegrationStatus();
+  const activity = await getWeeklyActivity();
+  const usage = await getAiUsage();
+  const sources = await listSourcesWithStats();
 
   const lastRun = runs[0];
   const stepOf = (name: string): RunStep | undefined => lastRun?.steps.find((s) => s.name === name);

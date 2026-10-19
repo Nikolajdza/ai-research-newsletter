@@ -2,37 +2,57 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
+type Sql = ReturnType<typeof postgres>;
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 const globalForDb = globalThis as unknown as {
-  postgresClient?: ReturnType<typeof postgres>;
+  postgresClient?: Sql;
   drizzleDb?: Db;
 };
 
-function createDb(): Db {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example → .env");
+function connectionUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set. Copy .env.example → .env");
+  // PgBouncer (Supabase transaction pooler) must not use prepared statements.
+  if (url.includes("pooler.supabase.com") && !url.includes("pgbouncer=true")) {
+    return url.includes("?") ? `${url}&pgbouncer=true` : `${url}?pgbouncer=true`;
   }
+  return url;
+}
 
-  const isSupabase = connectionString.includes("supabase.co");
-  // Transaction pooler + max:1 deadlocks when pages fire Promise.all of several queries
-  // (home dashboard does 7+ counts). Allow a small pool; keep prepare off for PgBouncer.
-  const client =
-    globalForDb.postgresClient ??
-    postgres(connectionString, {
-      max: process.env.VERCEL ? 5 : 10,
-      prepare: false,
-      connect_timeout: 15,
-      idle_timeout: 20,
-      max_lifetime: 60 * 5,
-      ssl: isSupabase ? "require" : undefined,
-    });
+function createSql(): Sql {
+  const url = connectionUrl();
+  const onVercel = Boolean(process.env.VERCEL);
+  return postgres(url, {
+    // On Vercel, keep the pool tiny and short-lived. Stale sockets from a warm
+    // isolate were leaving every page stuck on its Suspense skeleton.
+    max: onVercel ? 3 : 10,
+    prepare: false,
+    connect_timeout: 10,
+    idle_timeout: onVercel ? 5 : 20,
+    max_lifetime: onVercel ? 60 : 60 * 30,
+    ssl: url.includes("supabase.co") ? "require" : undefined,
+  });
+}
 
-  // Reuse across warm serverless invocations (and local HMR).
+function createDb(): Db {
+  const client = globalForDb.postgresClient ?? createSql();
   globalForDb.postgresClient = client;
-
   return drizzle(client, { schema });
+}
+
+/** Drop cached client so the next query opens a fresh connection (Vercel warm isolates). */
+export async function resetDbClient(): Promise<void> {
+  const old = globalForDb.postgresClient;
+  globalForDb.postgresClient = undefined;
+  globalForDb.drizzleDb = undefined;
+  if (old) {
+    try {
+      await old.end({ timeout: 1 });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** Lazy so Next build can import modules without a live DB. */
@@ -41,6 +61,7 @@ export const db: Db = new Proxy({} as Db, {
     if (!globalForDb.drizzleDb) {
       globalForDb.drizzleDb = createDb();
     }
-    return Reflect.get(globalForDb.drizzleDb, prop, receiver);
+    const value = Reflect.get(globalForDb.drizzleDb, prop, receiver);
+    return typeof value === "function" ? value.bind(globalForDb.drizzleDb) : value;
   },
 });
