@@ -7,6 +7,7 @@ import { ArticleCard, ArticleRow } from "@/components/article/article-card";
 import { ActionButton } from "@/components/ui/action-button";
 import { EmptyState, PageHeader, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
+import { requireUser } from "@/server/auth/session";
 import { isTopicSlug, TOPIC_SLUGS, TOPICS, type TopicSlug } from "@/lib/topics";
 import { listArticles } from "@/server/queries";
 
@@ -53,9 +54,9 @@ export default function ArticlesPage(props: PageProps<"/articles">) {
         title="Explore"
         subtitle="Browse every collected article. Scored ones show their AI relevance."
         actions={
-          <ActionButton action={analyzeBatchAction.bind(null, 8)} variant="secondary" pendingLabel="Analyzing…">
-            <Sparkles className="h-4 w-4" /> Analyze 8 more
-          </ActionButton>
+          <Suspense fallback={null}>
+            <AnalyzeMoreButton />
+          </Suspense>
         }
       />
       <Suspense fallback={<PageSkeleton />}>
@@ -65,11 +66,22 @@ export default function ArticlesPage(props: PageProps<"/articles">) {
   );
 }
 
+async function AnalyzeMoreButton() {
+  const user = await requireUser();
+  if (user.role !== "admin") return null;
+  return (
+    <ActionButton action={analyzeBatchAction.bind(null, 8)} variant="secondary" pendingLabel="Analyzing…">
+      <Sparkles className="h-4 w-4" /> Analyze 8 more
+    </ActionButton>
+  );
+}
+
 async function Results({ searchParams }: Pick<PageProps<"/articles">, "searchParams">) {
   await connection();
+  const user = await requireUser();
   const filters = parseFilters(await searchParams);
   const now = requestNow();
-  const { items, total } = await listArticles({
+  const { items, total } = await listArticles(user.id, {
     q: filters.q,
     topic: filters.topic,
     minScore: filters.min || undefined,

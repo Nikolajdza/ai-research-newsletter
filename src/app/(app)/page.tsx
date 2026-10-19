@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/badges";
 import { EmptyState, PageSkeleton, SectionHeader } from "@/components/ui/layout";
 import { StatCard } from "@/components/ui/stat-card";
 import { greeting, localHour, requestNow, timeAgo } from "@/lib/format";
+import { requireUser } from "@/server/auth/session";
 import {
   getDashboardStats,
   getHighlights,
@@ -28,14 +29,16 @@ export default function HomePage() {
 
 async function Dashboard() {
   await connection();
+  const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const now = requestNow();
   const [prefs, stats, highlights, latest, [lastRun], [lastDigest]] = await Promise.all([
-    getPreferences(),
-    getDashboardStats(),
-    getHighlights(4),
-    listRecentlyAnalyzed(6),
+    getPreferences(user.id),
+    getDashboardStats(user.id),
+    getHighlights(user.id, 4),
+    listRecentlyAnalyzed(user.id, 6),
     listWorkflowRuns(1),
-    listDigests(1),
+    listDigests(user.id, 1),
   ]);
   const hour = localHour(prefs.timezone, now);
 
@@ -43,7 +46,7 @@ async function Dashboard() {
     <div className="mx-auto max-w-7xl space-y-8 fade-up">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
-          {greeting(hour)}, {prefs.displayName} 👋
+          {greeting(hour)}, {user.displayName} 👋
         </h1>
         <p className="mt-1 text-sm text-muted">Here&apos;s your personalized AI newsletter digest for today.</p>
       </div>
@@ -84,8 +87,18 @@ async function Dashboard() {
         {highlights.length === 0 ? (
           <EmptyState
             title="No scored articles yet"
-            description="Run the pipeline to collect RSS feeds and let AI score them. It takes about a minute."
-            action={<ActionButton action={runPipelineAction} pendingLabel="Running pipeline…"><Play className="h-4 w-4" /> Run pipeline</ActionButton>}
+            description={
+              isAdmin
+                ? "Run the pipeline to collect RSS feeds and let AI score them. It takes about a minute."
+                : "New stories in your topics are scored every hour. Check back soon or follow more topics."
+            }
+            action={
+              isAdmin ? (
+                <ActionButton action={runPipelineAction} pendingLabel="Running pipeline…">
+                  <Play className="h-4 w-4" /> Run pipeline
+                </ActionButton>
+              ) : undefined
+            }
           />
         ) : (
           <>
@@ -126,11 +139,13 @@ async function Dashboard() {
                 ? `Last run ${timeAgo(lastRun.startedAt, now)} via ${lastRun.trigger}`
                 : "Collect → analyze → digest has not run yet."}
             </p>
-            <div className="mt-4">
-              <ActionButton action={runPipelineAction} pendingLabel="Running… (~1 min)" className="w-full">
-                <Play className="h-4 w-4" /> Run now
-              </ActionButton>
-            </div>
+            {isAdmin && (
+              <div className="mt-4">
+                <ActionButton action={runPipelineAction} pendingLabel="Running… (~1 min)" className="w-full">
+                  <Play className="h-4 w-4" /> Run now
+                </ActionButton>
+              </div>
+            )}
             <Link href="/workflow" className="mt-3 inline-flex items-center gap-1 text-xs text-accent">
               Open workflow monitor <ArrowRight className="h-3 w-3" />
             </Link>

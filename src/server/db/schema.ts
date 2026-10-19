@@ -3,6 +3,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -13,6 +14,33 @@ import {
 import type { TopicSlug } from "../../lib/topics";
 
 export { TOPIC_SLUGS, type TopicSlug } from "../../lib/topics";
+
+export type UserRole = "admin" | "member";
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** Stored lowercased */
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name").notNull(),
+  /** First account becomes admin: manages sources and runs the pipeline. */
+  role: text("role").notNull().default("member").$type<UserRole>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const sessions = pgTable("sessions", {
+  /** sha256 of the cookie token, so a DB leak does not leak live sessions */
+  id: text("id").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 export const sources = pgTable(
   "sources",
@@ -50,9 +78,6 @@ export const articles = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** Topic inherited from source at ingest time */
     topic: text("topic").notNull().$type<TopicSlug>(),
-    savedAt: timestamp("saved_at", { withTimezone: true }),
-    /** Reader feedback on the AI pick: up | down */
-    feedback: text("feedback").$type<"up" | "down">(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -84,10 +109,35 @@ export const articleAnalyses = pgTable("article_analyses", {
     .defaultNow(),
 });
 
-/** Single-row prefs for demo (multi-user auth later if needed). */
+/** Per-user reading state; articles and analyses themselves are shared. */
+export const userArticles = pgTable(
+  "user_articles",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    articleId: uuid("article_id")
+      .notNull()
+      .references(() => articles.id, { onDelete: "cascade" }),
+    savedAt: timestamp("saved_at", { withTimezone: true }),
+    /** Reader feedback on the AI pick */
+    feedback: text("feedback").$type<"up" | "down">(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.articleId] })],
+);
+
 export const preferences = pgTable("preferences", {
   id: uuid("id").defaultRandom().primaryKey(),
-  displayName: text("display_name").notNull().default("Nikola"),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  telegramChatId: text("telegram_chat_id"),
+  /** One-time token for the t.me/<bot>?start=<token> connect link */
+  telegramLinkToken: text("telegram_link_token").unique(),
   selectedTopics: jsonb("selected_topics")
     .$type<TopicSlug[]>()
     .notNull()
@@ -117,11 +167,14 @@ export const ingestRuns = pgTable("ingest_runs", {
   errorMessage: text("error_message"),
 });
 
-/** One digest per calendar day + channel (idempotent daily send). */
+/** One digest per user + calendar day + channel (idempotent daily send). */
 export const digests = pgTable(
   "digests",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     /** YYYY-MM-DD in the user's timezone */
     digestDate: text("digest_date").notNull(),
     channel: text("channel").notNull().default("telegram"),
@@ -138,7 +191,7 @@ export const digests = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("digests_date_channel_uidx").on(t.digestDate, t.channel)],
+  (t) => [uniqueIndex("digests_user_date_channel_uidx").on(t.userId, t.digestDate, t.channel)],
 );
 
 export const workflowRuns = pgTable("workflow_runs", {

@@ -14,11 +14,13 @@ type SourceItem = { id: string; name: string; feedUrl: string; topic: TopicSlug;
 export function PreferencesForm({
   initial,
   sources,
-  telegramConfigured,
+  telegramConnected,
+  canManageSources,
 }: {
   initial: PreferencesInput;
   sources: SourceItem[];
-  telegramConfigured: boolean;
+  telegramConnected: boolean;
+  canManageSources: boolean;
 }) {
   const [state, setState] = useState(initial);
   const [pending, startTransition] = useTransition();
@@ -75,7 +77,11 @@ export function PreferencesForm({
 
         <section className="card p-5">
           <h2 className="font-semibold">Sources</h2>
-          <p className="mt-1 text-sm text-muted">Feeds for the topics above. Changes apply immediately.</p>
+          <p className="mt-1 text-sm text-muted">
+            {canManageSources
+              ? "Feeds for the topics above. Changes apply to every reader immediately."
+              : "Feeds that power the topics above."}
+          </p>
           <div className="mt-4 divide-y divide-line">
             {visibleSources.length === 0 && <p className="py-3 text-sm text-muted">Pick a topic to see its sources.</p>}
             {visibleSources.map((s) => (
@@ -87,7 +93,11 @@ export function PreferencesForm({
                   <p className="text-sm font-medium">{s.name}</p>
                   <p className="truncate text-xs text-muted">{s.feedUrl}</p>
                 </div>
-                <SourceToggle sourceId={s.id} enabled={s.enabled} name={s.name} />
+                {canManageSources ? (
+                  <SourceToggle sourceId={s.id} enabled={s.enabled} name={s.name} />
+                ) : (
+                  <span className="text-xs text-muted">{s.enabled ? "Active" : "Paused"}</span>
+                )}
               </div>
             ))}
           </div>
@@ -182,7 +192,9 @@ export function PreferencesForm({
               <Send className="h-4 w-4 text-sky-300" />
               <div className="flex-1">
                 <p className="text-sm">Telegram (daily digest)</p>
-                {!telegramConfigured && <p className="text-[11px] text-amber-300/80">Bot not configured — dry runs only</p>}
+                {!telegramConnected && (
+                  <p className="text-[11px] text-amber-300/80">Not connected — connect it in Settings</p>
+                )}
               </div>
               <Switch label="Telegram" checked={state.telegramEnabled} onChange={(v) => set("telegramEnabled", v)} />
             </div>

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { inArray, sql } from "drizzle-orm";
 import { db } from "./client";
-import { preferences, sources, type TopicSlug } from "./schema";
+import { sources, type TopicSlug } from "./schema";
 
 const SEED_SOURCES: {
   name: string;
@@ -55,22 +55,6 @@ async function seed() {
     .update(sources)
     .set({ enabled: false })
     .where(inArray(sources.feedUrl, RETIRED_FEED_URLS));
-
-  const existingPrefs = await db.select().from(preferences).limit(1);
-  if (existingPrefs.length === 0) {
-    await db.insert(preferences).values({
-      selectedTopics: ["ai-ml", "web-dev", "sports", "world", "science", "business"],
-      minRelevanceScore: 6,
-      digestHourLocal: 7,
-      timezone: "Europe/Belgrade",
-      digestFormat: "detailed",
-      telegramEnabled: true,
-      emailEnabled: false,
-    });
-    console.log("Inserted default preferences (multi-topic).");
-  } else {
-    console.log("Preferences already present — skipped.");
-  }
 
   const allSources = await db.select().from(sources);
   console.log(`Sources in DB: ${allSources.length}`);

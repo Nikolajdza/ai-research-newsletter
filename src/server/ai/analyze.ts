@@ -3,10 +3,10 @@ import { db } from "../db/client";
 import {
   articleAnalyses,
   articles,
-  preferences,
   sources,
   type TopicSlug,
 } from "../db/schema";
+import { getFollowedTopics } from "../followed-topics";
 import { analyzeArticleWithGroq, estimateCostUsd } from "./groq";
 
 const ANALYZE_CONCURRENCY = 2;
@@ -31,13 +31,6 @@ type PendingArticle = {
   excerpt: string | null;
   sourceName: string;
 };
-
-const DEFAULT_TOPICS: TopicSlug[] = ["ai-ml", "web-dev", "business", "sports", "world", "science"];
-
-async function getSelectedTopics(): Promise<TopicSlug[]> {
-  const [prefs] = await db.select().from(preferences).limit(1);
-  return prefs?.selectedTopics?.length ? prefs.selectedTopics : DEFAULT_TOPICS;
-}
 
 const pendingSelect = {
   id: articles.id,
@@ -139,7 +132,7 @@ export async function analyzeUnanalyzedArticles(options?: {
   limit?: number;
 }): Promise<AnalyzeBatchResult> {
   const limit = options?.limit ?? 10;
-  const selectedTopics = await getSelectedTopics();
+  const selectedTopics = await getFollowedTopics();
   const pending = await pickPending(limit, selectedTopics);
 
   const result: AnalyzeBatchResult = {
@@ -236,7 +229,7 @@ export async function analyzeArticleById(articleId: string) {
 
   if (!article) throw new Error(`Article not found: ${articleId}`);
 
-  const selectedTopics = await getSelectedTopics();
+  const selectedTopics = await getFollowedTopics();
   const { llm } = await analyzeAndPersist(article, selectedTopics);
 
   return {

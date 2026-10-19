@@ -44,3 +44,12 @@ All five phases are complete.
 - Workflow monitor: n8n node diagram with step status, execution log, 7-day chart, AI cost & feedback
 - n8n workflow records every execution via `/api/workflow/runs` (start + finish)
 - Groq rate-limit (429) waits instead of failing articles
+
+## Phase 6 — Accounts + personalization
+
+- Email/password auth (scrypt), Postgres sessions, `proxy.ts` gate, public `/how-it-works`, `/login`, `/register`
+- First account is admin (sources, pipeline, integrations); later accounts are members
+- Per-user preferences, saved list, 👍/👎 and digests; articles + analyses stay shared
+- Collect/analyze cover the union of all followed topics
+- Telegram: per-user chat via deep link `/start <token>` (webhook in prod, `getUpdates` locally), `/stop` to unlink
+- Card-style digest: header + one photo card per story with a “Read article ↗” button

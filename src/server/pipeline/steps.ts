@@ -1,5 +1,5 @@
 import { analyzeUnanalyzedArticles, type AnalyzeBatchResult } from "../ai/analyze";
-import { sendDailyDigest, type DigestSendResult } from "../digest/send";
+import { sendDailyDigests, type DigestBatchResult, type DigestOptions } from "../digest/send";
 import { collectFromEnabledSources, type CollectResult } from "../ingest/collect";
 import { appendStep } from "./runs";
 
@@ -64,23 +64,37 @@ export async function runAnalyzeStep(
   }
 }
 
+function digestStepStatus(batch: DigestBatchResult): string {
+  const delivered = batch.sent + batch.dryRun;
+  if (batch.failed) return delivered ? "completed_with_errors" : "failed";
+  return delivered ? "completed" : "skipped";
+}
+
+function digestStepDetail(batch: DigestBatchResult): string {
+  if (batch.users === 0) return "no accounts yet";
+  const waiting = batch.results.filter((r) => r.status === "waiting").length;
+  const parts = [
+    `${batch.users} ${batch.users === 1 ? "user" : "users"}`,
+    batch.sent && `${batch.sent} sent`,
+    batch.dryRun && `${batch.dryRun} dry run`,
+    waiting && `${waiting} waiting for their hour`,
+    batch.skipped - waiting && `${batch.skipped - waiting} already done`,
+    batch.failed && `${batch.failed} failed: ${batch.errors[0]?.message}`,
+  ];
+  return parts.filter(Boolean).join(" · ");
+}
+
 export async function runDigestStep(
   runId: string | undefined,
-  options: { force?: boolean; dryRun?: boolean; respectSchedule?: boolean },
-): Promise<StepOutcome<DigestSendResult>> {
+  options: DigestOptions,
+): Promise<StepOutcome<DigestBatchResult>> {
   try {
-    const result = await sendDailyDigest(options);
+    const result = await sendDailyDigests(options);
     if (runId) {
       await appendStep(
         runId,
-        {
-          name: "digest",
-          status: result.skipped ? "skipped" : result.status,
-          detail: result.skipped
-            ? result.reason
-            : `${result.itemCount} items · ${result.dryRun ? `dry run (${result.reason})` : "sent to Telegram"}`,
-        },
-        { digestId: result.digestId },
+        { name: "digest", status: digestStepStatus(result), detail: digestStepDetail(result) },
+        { digestId: result.results.length === 1 ? result.results[0].digestId : null },
       );
     }
     return { ok: true, result };

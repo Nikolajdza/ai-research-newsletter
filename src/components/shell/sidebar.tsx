@@ -1,7 +1,8 @@
-import { connection } from "next/server";
+import { LogOut } from "lucide-react";
 import type { ReactNode } from "react";
+import { logoutAction } from "@/app/auth-actions";
 import { initials } from "@/lib/format";
-import { getPreferences } from "@/server/queries";
+import { requireUser } from "@/server/auth/session";
 import { Brand } from "./brand";
 import { SidebarLinks } from "./nav-links";
 
@@ -20,17 +21,21 @@ export function Sidebar({ profile }: { profile: ReactNode }) {
 }
 
 export async function SidebarProfile() {
-  await connection();
-  const prefs = await getPreferences();
+  const user = await requireUser();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-line bg-white/[0.02] p-3">
-      <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-accent/80 to-accent-2/80 text-xs font-semibold">
-        {initials(prefs.displayName)}
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent/80 to-accent-2/80 text-xs font-semibold">
+        {initials(user.displayName)}
       </span>
-      <div className="min-w-0 leading-tight">
-        <p className="truncate text-sm font-medium">{prefs.displayName}</p>
-        <p className="truncate text-xs text-muted">Local workspace</p>
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="truncate text-sm font-medium">{user.displayName}</p>
+        <p className="truncate text-xs text-muted">{user.role === "admin" ? "Admin" : user.email}</p>
       </div>
+      <form action={logoutAction}>
+        <button aria-label="Sign out" title="Sign out" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-white/[0.05] hover:text-foreground">
+          <LogOut className="h-4 w-4" />
+        </button>
+      </form>
     </div>
   );
 }

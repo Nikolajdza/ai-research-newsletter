@@ -8,6 +8,7 @@ import { StatusBadge, TopicChip } from "@/components/ui/badges";
 import { PageHeader, Skeleton } from "@/components/ui/layout";
 import { TopicIcon } from "@/components/ui/topic-icon";
 import { requestNow, timeAgo } from "@/lib/format";
+import { requireUser } from "@/server/auth/session";
 import { getPreferences, listIngestRuns, listSourcesWithStats } from "@/server/queries";
 
 export const metadata = { title: "Sources" };
@@ -17,17 +18,13 @@ export default function SourcesPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Sources"
-        subtitle="RSS feeds InsightLoop collects from. Toggle a feed to pause it; only topics you follow are fetched."
+        subtitle="RSS feeds InsightLoop collects from. Only topics that at least one reader follows are fetched."
         actions={
-          <ActionButton action={runPipelineAction} pendingLabel="Collecting…">
-            <Play className="h-4 w-4" /> Collect now
-          </ActionButton>
+          <Suspense fallback={null}>
+            <CollectNowButton />
+          </Suspense>
         }
       />
-      <div className="card mb-6 p-5">
-        <p className="mb-3 font-medium">Add a feed</p>
-        <AddSourceForm />
-      </div>
       <Suspense fallback={<Skeleton className="h-96" />}>
         <SourceList />
       </Suspense>
@@ -35,15 +32,33 @@ export default function SourcesPage() {
   );
 }
 
+async function CollectNowButton() {
+  const user = await requireUser();
+  if (user.role !== "admin") return null;
+  return (
+    <ActionButton action={runPipelineAction} pendingLabel="Collecting…">
+      <Play className="h-4 w-4" /> Collect now
+    </ActionButton>
+  );
+}
+
 async function SourceList() {
   await connection();
+  const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const now = requestNow();
-  const [list, prefs, runs] = await Promise.all([listSourcesWithStats(), getPreferences(), listIngestRuns(1)]);
+  const [list, prefs, runs] = await Promise.all([listSourcesWithStats(), getPreferences(user.id), listIngestRuns(1)]);
   const followed = new Set(prefs.selectedTopics);
   const lastRun = runs[0];
 
   return (
     <div className="space-y-4 fade-up">
+      {isAdmin && (
+        <div className="card p-5">
+          <p className="mb-3 font-medium">Add a feed</p>
+          <AddSourceForm />
+        </div>
+      )}
       {lastRun && (
         <div className="card flex flex-wrap items-center gap-3 p-4 text-sm">
           <StatusBadge status={lastRun.status} />
@@ -65,7 +80,7 @@ async function SourceList() {
                 <p className="font-medium">{s.name}</p>
                 <TopicChip topic={s.topic} />
                 {!followed.has(s.topic) && (
-                  <span className="text-[11px] text-amber-300/80">topic not followed</span>
+                  <span className="text-[11px] text-amber-300/80">you don&apos;t follow this topic</span>
                 )}
               </div>
               <p className="mt-0.5 truncate text-xs text-muted">
@@ -86,8 +101,14 @@ async function SourceList() {
                 <ExternalLink className="h-4 w-4" />
               </a>
             )}
-            <DeleteSourceButton sourceId={s.id} name={s.name} />
-            <SourceToggle sourceId={s.id} enabled={s.enabled} name={s.name} />
+            {isAdmin ? (
+              <>
+                <DeleteSourceButton sourceId={s.id} name={s.name} />
+                <SourceToggle sourceId={s.id} enabled={s.enabled} name={s.name} />
+              </>
+            ) : (
+              <span className="text-xs text-muted">{s.enabled ? "Active" : "Paused"}</span>
+            )}
           </div>
         ))}
       </div>

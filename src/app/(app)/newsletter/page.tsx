@@ -9,20 +9,50 @@ import { StatusBadge, TopicChip } from "@/components/ui/badges";
 import { EmptyState, PageSkeleton } from "@/components/ui/layout";
 import { Thumb } from "@/components/ui/thumb";
 import { formatDate, formatHour, formatTime, requestNow } from "@/lib/format";
-import { formatTelegramDigest } from "@/server/digest/format";
+import { TOPICS } from "@/lib/topics";
+import { requireUser } from "@/server/auth/session";
 import { selectDigestItems } from "@/server/digest/select";
-import { telegramConfigured } from "@/server/digest/telegram";
-import { getArticlesByIds, getPreferences, listDigests } from "@/server/queries";
+import { telegramBotConfigured } from "@/server/digest/telegram";
+import { getArticlesByIds, getPreferences, listDigests, type ArticleListItem } from "@/server/queries";
 
 export const metadata = { title: "Newsletter" };
 
-function telegramPlainText(html: string): string {
-  return html
-    .replace(/<a href="[^"]*">Read<\/a>/g, "🔗 Read")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+function TelegramPreview({ digestDate, items }: { digestDate: string; items: ArticleListItem[] }) {
+  return (
+    <div className="mt-3 max-h-[560px] space-y-2.5 overflow-y-auto rounded-2xl bg-[#0e1621] p-3 text-[13px] leading-relaxed text-slate-100">
+      <div className="rounded-2xl rounded-tl-sm bg-[#182533] px-3.5 py-2.5">
+        <p className="font-semibold">☀️ InsightLoop · Daily Digest</p>
+        <p className="text-slate-300">
+          {digestDate} · {items.length} stories picked for you
+        </p>
+      </div>
+      {items.map((item, i) => {
+        const topic = TOPICS[item.topic];
+        return (
+          <div key={item.id} className="overflow-hidden rounded-2xl rounded-tl-sm bg-[#182533]">
+            {item.imageUrl && <Thumb imageUrl={item.imageUrl} topic={item.topic} className="aspect-[16/9] w-full" />}
+            <div className="space-y-1.5 px-3.5 py-2.5">
+              <p className="font-semibold">
+                {i + 1}. {item.title}
+              </p>
+              <p className="text-xs text-slate-300">
+                {topic.emoji} {topic.label} · ⭐ {(item.relevanceScore ?? 0).toFixed(1)} · {item.sourceName}
+              </p>
+              {item.summary && <p className="line-clamp-4 text-slate-200">{item.summary}</p>}
+            </div>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block border-t border-white/5 py-2 text-center text-xs font-medium text-sky-300 hover:bg-white/[0.03]"
+            >
+              Read article ↗
+            </a>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function NewsletterPage(props: PageProps<"/newsletter">) {
@@ -37,27 +67,25 @@ async function Newsletter({ searchParams }: Pick<PageProps<"/newsletter">, "sear
   await connection();
   const { id } = await searchParams;
   const now = requestNow();
-  const [prefs, history] = await Promise.all([getPreferences(), listDigests(14)]);
+  const user = await requireUser();
+  const [prefs, history] = await Promise.all([getPreferences(user.id), listDigests(user.id, 14)]);
 
   const selected = history.find((d) => d.id === id) ?? history[0] ?? null;
   let articleIds = selected?.articleIds ?? [];
-  let message = selected?.messageText ?? "";
+  let digestDate = selected?.digestDate ?? "";
   let isPreview = false;
 
   if (!selected) {
-    const selection = await selectDigestItems();
+    const selection = await selectDigestItems(prefs);
     articleIds = selection.items.map((i) => i.id);
-    message = formatTelegramDigest({
-      digestDate: selection.digestDate,
-      format: selection.format,
-      items: selection.items,
-    });
+    digestDate = selection.digestDate;
     isPreview = true;
   }
 
-  const items = await getArticlesByIds(articleIds);
+  const items = await getArticlesByIds(user.id, articleIds);
   const [featured, ...rest] = items;
-  const telegramReady = telegramConfigured();
+  const botReady = telegramBotConfigured();
+  const connected = botReady && Boolean(prefs.telegramChatId);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6 fade-up xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -116,16 +144,26 @@ async function Newsletter({ searchParams }: Pick<PageProps<"/newsletter">, "sear
           </p>
           <div
             className={`mt-3 rounded-xl px-3 py-2 text-xs ring-1 ${
-              telegramReady && prefs.telegramEnabled
+              connected && prefs.telegramEnabled
                 ? "bg-emerald-500/10 text-emerald-200 ring-emerald-400/20"
                 : "bg-amber-500/10 text-amber-200 ring-amber-400/20"
             }`}
           >
-            {telegramReady && prefs.telegramEnabled
-              ? "Telegram connected — digests are delivered to your chat."
-              : !prefs.telegramEnabled
-                ? "Telegram is turned off in Preferences — digests are saved as dry runs."
-                : "Telegram not configured — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env. Digests are saved as dry runs."}
+            {!botReady ? (
+              "Telegram bot is not configured on the server — digests are saved as dry runs."
+            ) : !prefs.telegramChatId ? (
+              <>
+                Telegram is not connected yet.{" "}
+                <Link href="/settings" className="underline underline-offset-2">
+                  Connect it in Settings
+                </Link>{" "}
+                to get the digest as cards in your chat.
+              </>
+            ) : !prefs.telegramEnabled ? (
+              "Telegram is turned off in Preferences — digests are saved as dry runs."
+            ) : (
+              "Telegram connected — digests arrive as one card per story in your chat."
+            )}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <ActionButton action={sendDigestAction.bind(null, { force: false })} pendingLabel="Sending…">
@@ -142,11 +180,13 @@ async function Newsletter({ searchParams }: Pick<PageProps<"/newsletter">, "sear
 
         <div className="card p-5">
           <p className="flex items-center gap-2 font-medium">
-            <Mail className="h-4 w-4 text-accent" /> Telegram message {isPreview && <span className="text-xs text-muted">(preview)</span>}
+            <Mail className="h-4 w-4 text-accent" /> In Telegram {isPreview && <span className="text-xs text-muted">(preview)</span>}
           </p>
-          <div className="mt-3 max-h-80 overflow-y-auto rounded-2xl rounded-tl-sm bg-[#1d2a3a] p-4 text-[13px] leading-relaxed whitespace-pre-wrap text-slate-100">
-            {message ? telegramPlainText(message) : "—"}
-          </div>
+          {items.length ? (
+            <TelegramPreview digestDate={digestDate} items={items} />
+          ) : (
+            <p className="mt-2 text-sm text-muted">—</p>
+          )}
         </div>
 
         <div className="card p-5">

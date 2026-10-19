@@ -13,6 +13,7 @@ import { RelevanceGauge } from "@/components/ui/relevance-gauge";
 import { Thumb } from "@/components/ui/thumb";
 import { formatDate, readMinutes, requestNow, scoreLabel } from "@/lib/format";
 import { estimateCostUsd } from "@/server/ai/groq";
+import { requireUser } from "@/server/auth/session";
 import { getArticle, getRelatedArticles } from "@/server/queries";
 
 export default function ArticlePage(props: PageProps<"/articles/[id]">) {
@@ -30,11 +31,12 @@ export default function ArticlePage(props: PageProps<"/articles/[id]">) {
 
 async function ArticleDetail({ params }: Pick<PageProps<"/articles/[id]">, "params">) {
   await connection();
+  const user = await requireUser();
   const { id } = await params;
-  const article = await getArticle(id);
+  const article = await getArticle(user.id, id);
   if (!article) notFound();
 
-  const related = await getRelatedArticles(article.id, article.topic);
+  const related = await getRelatedArticles(user.id, article.id, article.topic);
   const now = requestNow();
   const score = article.relevanceScore;
   const tags = [...new Set(article.tags)].slice(0, 8);

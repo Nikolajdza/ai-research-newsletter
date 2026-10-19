@@ -1,17 +1,22 @@
 import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { DEFAULT_TOPICS } from "@/lib/topics";
 import { db } from "../db/client";
 import {
   articleAnalyses,
   articles,
-  preferences,
   sources,
+  userArticles,
+  type preferences,
   type TopicSlug,
 } from "../db/schema";
+
+export type PreferencesRow = typeof preferences.$inferSelect;
 
 export type DigestCandidate = {
   id: string;
   title: string;
   url: string;
+  imageUrl: string | null;
   topic: TopicSlug;
   sourceName: string;
   summary: string | null;
@@ -29,7 +34,7 @@ export type DigestSelection = {
   items: DigestCandidate[];
 };
 
-function localDateString(timezone: string, date = new Date()): string {
+export function localDateString(timezone: string, date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -65,64 +70,23 @@ export function diversifyCandidates(
   return picked;
 }
 
-export async function selectDigestItems(options?: {
-  lookbackHours?: number;
-  maxItems?: number;
-}): Promise<DigestSelection> {
+/** Digest candidates for one user: their topics and minimum score, minus stories they 👎'd. */
+export async function selectDigestItems(
+  prefs: PreferencesRow,
+  options?: { lookbackHours?: number; maxItems?: number },
+): Promise<DigestSelection> {
   const lookbackHours = options?.lookbackHours ?? 48;
   const maxItems = options?.maxItems ?? 6;
-
-  const [prefs] = await db.select().from(preferences).limit(1);
-  const timezone = prefs?.timezone ?? "Europe/Belgrade";
-  const format = prefs?.digestFormat ?? "detailed";
-  const minRelevanceScore = prefs?.minRelevanceScore ?? 6;
-  const selectedTopics = (prefs?.selectedTopics?.length
-    ? prefs.selectedTopics
-    : [
-        "ai-ml",
-        "web-dev",
-        "business",
-        "sports",
-        "world",
-        "science",
-      ]) as TopicSlug[];
-
+  const selectedTopics = prefs.selectedTopics.length ? prefs.selectedTopics : [...DEFAULT_TOPICS];
   const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
 
-  let rows = await db
-    .select({
-      id: articles.id,
-      title: articles.title,
-      url: articles.url,
-      topic: articles.topic,
-      sourceName: sources.name,
-      summary: articleAnalyses.summary,
-      relevanceScore: articleAnalyses.relevanceScore,
-      whyItMatters: articleAnalyses.whyItMatters,
-      keyTakeaways: articleAnalyses.keyTakeaways,
-    })
-    .from(articles)
-    .innerJoin(sources, eq(articles.sourceId, sources.id))
-    .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
-    .where(
-      and(
-        inArray(articles.topic, selectedTopics),
-        isNotNull(articleAnalyses.relevanceScore),
-        sql`${articles.feedback} is distinct from 'down'`,
-        gte(articleAnalyses.relevanceScore, minRelevanceScore),
-        gte(articles.fetchedAt, since),
-      ),
-    )
-    .orderBy(desc(articleAnalyses.relevanceScore), desc(articles.publishedAt))
-    .limit(40);
-
-  // Demo fallback: if lookback is empty, use any analyzed articles
-  if (rows.length === 0) {
-    rows = await db
+  const query = (recentOnly: boolean) =>
+    db
       .select({
         id: articles.id,
         title: articles.title,
         url: articles.url,
+        imageUrl: articles.imageUrl,
         topic: articles.topic,
         sourceName: sources.name,
         summary: articleAnalyses.summary,
@@ -133,35 +97,34 @@ export async function selectDigestItems(options?: {
       .from(articles)
       .innerJoin(sources, eq(articles.sourceId, sources.id))
       .innerJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+      .leftJoin(userArticles, and(eq(userArticles.articleId, articles.id), eq(userArticles.userId, prefs.userId)))
       .where(
         and(
           inArray(articles.topic, selectedTopics),
           isNotNull(articleAnalyses.relevanceScore),
-        sql`${articles.feedback} is distinct from 'down'`,
-          gte(articleAnalyses.relevanceScore, minRelevanceScore),
+          sql`${userArticles.feedback} is distinct from 'down'`,
+          gte(articleAnalyses.relevanceScore, prefs.minRelevanceScore),
+          recentOnly ? gte(articles.fetchedAt, since) : undefined,
         ),
       )
       .orderBy(desc(articleAnalyses.relevanceScore), desc(articles.publishedAt))
       .limit(40);
-  }
+
+  let rows = await query(true);
+  // Demo fallback: if the lookback window is empty, use any analyzed articles.
+  if (rows.length === 0) rows = await query(false);
 
   const candidates: DigestCandidate[] = rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    url: r.url,
-    topic: r.topic,
-    sourceName: r.sourceName,
-    summary: r.summary,
+    ...r,
     relevanceScore: r.relevanceScore ?? 0,
-    whyItMatters: r.whyItMatters,
     keyTakeaways: r.keyTakeaways ?? [],
   }));
 
   return {
-    digestDate: localDateString(timezone),
-    timezone,
-    format,
-    minRelevanceScore,
+    digestDate: localDateString(prefs.timezone),
+    timezone: prefs.timezone,
+    format: prefs.digestFormat,
+    minRelevanceScore: prefs.minRelevanceScore,
     selectedTopics,
     items: diversifyCandidates(candidates, { maxItems, maxPerTopic: 2 }),
   };

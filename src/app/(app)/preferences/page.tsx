@@ -3,7 +3,8 @@ import { Suspense } from "react";
 import { PreferencesForm } from "@/components/preferences/preferences-form";
 import { PageHeader, Skeleton } from "@/components/ui/layout";
 import { TIMEZONES } from "@/lib/format";
-import { telegramConfigured } from "@/server/digest/telegram";
+import { requireUser } from "@/server/auth/session";
+import { telegramBotConfigured } from "@/server/digest/telegram";
 import { getPreferences, listSourcesWithStats } from "@/server/queries";
 
 export const metadata = { title: "Preferences" };
@@ -21,14 +22,16 @@ export default function PreferencesPage() {
 
 async function PreferencesContent() {
   await connection();
-  const [prefs, sources] = await Promise.all([getPreferences(), listSourcesWithStats()]);
+  const user = await requireUser();
+  const [prefs, sources] = await Promise.all([getPreferences(user.id), listSourcesWithStats()]);
   const timezone = (TIMEZONES as readonly string[]).includes(prefs.timezone)
     ? (prefs.timezone as (typeof TIMEZONES)[number])
     : "Europe/Belgrade";
 
   return (
     <PreferencesForm
-      telegramConfigured={telegramConfigured()}
+      telegramConnected={telegramBotConfigured() && Boolean(prefs.telegramChatId)}
+      canManageSources={user.role === "admin"}
       sources={sources.map(({ id, name, feedUrl, topic, enabled }) => ({ id, name, feedUrl, topic, enabled }))}
       initial={{
         selectedTopics: prefs.selectedTopics,

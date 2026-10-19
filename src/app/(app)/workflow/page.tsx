@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/ui/badges";
 import { PageSkeleton } from "@/components/ui/layout";
 import { appConfig } from "@/lib/config";
 import { formatDayLabel, formatTime, requestNow, timeAgo } from "@/lib/format";
+import { requireUser } from "@/server/auth/session";
 import type { RunStep } from "@/server/pipeline/runs";
 import {
   getAiUsage,
@@ -55,6 +56,7 @@ export default function WorkflowPage() {
 
 async function WorkflowMonitor() {
   await connection();
+  const user = await requireUser();
   const now = requestNow();
   const [runs, status, activity, usage, sources, prefs] = await Promise.all([
     listWorkflowRuns(12),
@@ -62,7 +64,7 @@ async function WorkflowMonitor() {
     getWeeklyActivity(),
     getAiUsage(),
     listSourcesWithStats(),
-    getPreferences(),
+    getPreferences(user.id),
   ]);
 
   const lastRun = runs[0];
@@ -107,9 +109,11 @@ async function WorkflowMonitor() {
           >
             Open n8n <ExternalLink className="h-4 w-4" />
           </a>
-          <ActionButton action={runPipelineAction} pendingLabel="Running… (~1 min)">
-            <Play className="h-4 w-4" /> Run now
-          </ActionButton>
+          {user.role === "admin" && (
+            <ActionButton action={runPipelineAction} pendingLabel="Running… (~1 min)">
+              <Play className="h-4 w-4" /> Run now
+            </ActionButton>
+          )}
         </div>
       </div>
 

@@ -1,21 +1,22 @@
 "use server";
 
 import Parser from "rss-parser";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { TIMEZONES } from "@/lib/format";
 import { TOPIC_SLUGS } from "@/lib/topics";
 import { analyzeArticleById, analyzeUnanalyzedArticles } from "@/server/ai/analyze";
+import { requireAdmin, requireUser } from "@/server/auth/session";
 import { db } from "@/server/db/client";
-import { articles, preferences, sources } from "@/server/db/schema";
+import { preferences, sources, userArticles, users } from "@/server/db/schema";
+import { sendDigestForUser } from "@/server/digest/send";
 import { runDailyPipeline } from "@/server/pipeline/daily";
-import { groqConfigured, runDigestStep } from "@/server/pipeline/steps";
+import { groqConfigured } from "@/server/pipeline/steps";
 import { getPreferences } from "@/server/queries";
+import { createTelegramLink, disconnectTelegram, pollTelegramUpdates } from "@/server/telegram-link";
 
-// Local single-user demo: no auth layer. Add one before exposing beyond localhost.
-
-export type ActionResult = { ok: boolean; message: string };
+export type ActionResult = { ok: boolean; message: string; url?: string };
 
 const idSchema = z.string().uuid();
 
@@ -23,23 +24,38 @@ function fail(err: unknown): ActionResult {
   return { ok: false, message: err instanceof Error ? err.message : String(err) };
 }
 
+async function upsertUserArticle(
+  userId: string,
+  articleId: string,
+  values: { savedAt?: Date | null; feedback?: "up" | "down" | null },
+) {
+  await db
+    .insert(userArticles)
+    .values({ userId, articleId, ...values })
+    .onConflictDoUpdate({
+      target: [userArticles.userId, userArticles.articleId],
+      set: { ...values, updatedAt: new Date() },
+    });
+}
+
 export async function toggleSaveAction(articleId: string): Promise<ActionResult> {
+  const user = await requireUser();
   const id = idSchema.parse(articleId);
-  const [row] = await db.select({ savedAt: articles.savedAt }).from(articles).where(eq(articles.id, id));
-  if (!row) return { ok: false, message: "Article not found" };
-  const saved = !row.savedAt;
-  await db.update(articles).set({ savedAt: saved ? new Date() : null }).where(eq(articles.id, id));
+  const [row] = await db
+    .select({ savedAt: userArticles.savedAt })
+    .from(userArticles)
+    .where(and(eq(userArticles.articleId, id), eq(userArticles.userId, user.id)));
+  const saved = !row?.savedAt;
+  await upsertUserArticle(user.id, id, { savedAt: saved ? new Date() : null });
   refresh();
   return { ok: true, message: saved ? "Saved" : "Removed from saved" };
 }
 
-export async function setFeedbackAction(
-  articleId: string,
-  value: "up" | "down" | null,
-): Promise<ActionResult> {
+export async function setFeedbackAction(articleId: string, value: "up" | "down" | null): Promise<ActionResult> {
+  const user = await requireUser();
   const id = idSchema.parse(articleId);
   const feedback = z.enum(["up", "down"]).nullable().parse(value);
-  await db.update(articles).set({ feedback }).where(eq(articles.id, id));
+  await upsertUserArticle(user.id, id, { feedback });
   refresh();
   return { ok: true, message: feedback ? "Thanks for the feedback" : "Feedback cleared" };
 }
@@ -57,29 +73,31 @@ const preferencesSchema = z.object({
 export type PreferencesInput = z.infer<typeof preferencesSchema>;
 
 export async function savePreferencesAction(input: PreferencesInput): Promise<ActionResult> {
+  const user = await requireUser();
   const parsed = preferencesSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid preferences" };
   }
-  const prefs = await getPreferences();
+  await getPreferences(user.id);
   await db
     .update(preferences)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(preferences.id, prefs.id));
+    .where(eq(preferences.userId, user.id));
   refresh();
   return { ok: true, message: "Preferences saved" };
 }
 
 export async function updateDisplayNameAction(name: string): Promise<ActionResult> {
+  const user = await requireUser();
   const displayName = z.string().trim().min(1).max(40).safeParse(name);
   if (!displayName.success) return { ok: false, message: "Name must be 1–40 characters" };
-  const prefs = await getPreferences();
-  await db.update(preferences).set({ displayName: displayName.data }).where(eq(preferences.id, prefs.id));
+  await db.update(users).set({ displayName: displayName.data }).where(eq(users.id, user.id));
   refresh();
   return { ok: true, message: "Profile updated" };
 }
 
 export async function toggleSourceAction(sourceId: string, enabled: boolean): Promise<ActionResult> {
+  await requireAdmin();
   const id = idSchema.parse(sourceId);
   await db.update(sources).set({ enabled, updatedAt: new Date() }).where(eq(sources.id, id));
   refresh();
@@ -87,6 +105,7 @@ export async function toggleSourceAction(sourceId: string, enabled: boolean): Pr
 }
 
 export async function deleteSourceAction(sourceId: string): Promise<ActionResult> {
+  await requireAdmin();
   const id = idSchema.parse(sourceId);
   await db.delete(sources).where(eq(sources.id, id));
   refresh();
@@ -99,11 +118,8 @@ const newSourceSchema = z.object({
   topic: z.enum(TOPIC_SLUGS),
 });
 
-export async function addSourceAction(input: {
-  name: string;
-  feedUrl: string;
-  topic: string;
-}): Promise<ActionResult> {
+export async function addSourceAction(input: { name: string; feedUrl: string; topic: string }): Promise<ActionResult> {
+  await requireAdmin();
   const parsed = newSourceSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid source" };
@@ -124,6 +140,7 @@ export async function addSourceAction(input: {
 }
 
 export async function runPipelineAction(): Promise<ActionResult> {
+  await requireAdmin();
   try {
     const result = await runDailyPipeline({ trigger: "dashboard", analyzeLimit: 8 });
     refresh();
@@ -135,20 +152,25 @@ export async function runPipelineAction(): Promise<ActionResult> {
 }
 
 export async function sendDigestAction(options: { force: boolean }): Promise<ActionResult> {
-  const outcome = await runDigestStep(undefined, { force: options.force });
-  refresh();
-  if (!outcome.ok) return { ok: false, message: outcome.error };
-  const r = outcome.result;
-  if (r.skipped) return { ok: true, message: `Already done today (${r.reason}). Use “Resend” to force.` };
-  return {
-    ok: true,
-    message: r.dryRun
-      ? `Digest built with ${r.itemCount} items — dry run (${r.reason})`
-      : `Sent ${r.itemCount} items to Telegram`,
-  };
+  const user = await requireUser();
+  try {
+    const r = await sendDigestForUser(await getPreferences(user.id), { force: options.force });
+    refresh();
+    if (r.skipped) return { ok: true, message: `Already done today (${r.reason}). Use “Rebuild & resend” to force.` };
+    return {
+      ok: true,
+      message: r.dryRun
+        ? `Digest built with ${r.itemCount} items — dry run (${r.reason?.replaceAll("_", " ")})`
+        : `Sent ${r.itemCount} cards to Telegram`,
+    };
+  } catch (err) {
+    refresh();
+    return fail(err);
+  }
 }
 
 export async function analyzeArticleAction(articleId: string): Promise<ActionResult> {
+  await requireUser();
   if (!groqConfigured()) return { ok: false, message: "GROQ_API_KEY_NEWSLETTER is not set" };
   try {
     const result = await analyzeArticleById(idSchema.parse(articleId));
@@ -165,6 +187,7 @@ export async function analyzeArticleAction(articleId: string): Promise<ActionRes
 }
 
 export async function analyzeBatchAction(limit: number): Promise<ActionResult> {
+  await requireAdmin();
   if (!groqConfigured()) return { ok: false, message: "GROQ_API_KEY_NEWSLETTER is not set" };
   try {
     const r = await analyzeUnanalyzedArticles({ limit: Math.min(Math.max(limit, 1), 30) });
@@ -176,4 +199,33 @@ export async function analyzeBatchAction(limit: number): Promise<ActionResult> {
   } catch (err) {
     return fail(err);
   }
+}
+
+export async function connectTelegramAction(): Promise<ActionResult> {
+  const user = await requireUser();
+  await getPreferences(user.id);
+  const link = await createTelegramLink(user.id);
+  if ("error" in link) return { ok: false, message: link.error };
+  return { ok: true, message: "Press Start in Telegram, then come back and check the connection.", url: link.url };
+}
+
+export async function checkTelegramAction(): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    await pollTelegramUpdates();
+  } catch (err) {
+    return fail(err);
+  }
+  const prefs = await getPreferences(user.id);
+  refresh();
+  return prefs.telegramChatId
+    ? { ok: true, message: "Telegram connected" }
+    : { ok: false, message: "Not connected yet — open the link and press Start in Telegram." };
+}
+
+export async function disconnectTelegramAction(): Promise<ActionResult> {
+  const user = await requireUser();
+  await disconnectTelegram(user.id);
+  refresh();
+  return { ok: true, message: "Telegram disconnected" };
 }

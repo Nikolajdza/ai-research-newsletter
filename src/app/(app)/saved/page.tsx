@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ArticleCard, ArticleRow } from "@/components/article/article-card";
 import { EmptyState, PageHeader, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
+import { requireUser } from "@/server/auth/session";
 import { listSavedArticles } from "@/server/queries";
 
 export const metadata = { title: "Saved Articles" };
@@ -22,7 +23,8 @@ export default function SavedPage() {
 async function SavedList() {
   await connection();
   const now = requestNow();
-  const items = await listSavedArticles();
+  const user = await requireUser();
+  const items = await listSavedArticles(user.id);
 
   if (items.length === 0) {
     return (

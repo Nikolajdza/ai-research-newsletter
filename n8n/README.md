@@ -13,7 +13,7 @@ n8n is the orchestrator; the work happens in the Next.js API so it stays typed, 
 | Start Run | `POST /api/workflow/runs` | Creates a `workflow_runs` row; returns `run.id` + `respectSchedule` |
 | RSS Read + Dedupe | `POST /api/ingest/collect` | Feeds of followed topics, canonical URL dedupe |
 | AI Agent | `POST /api/analyze` | 8 unanalyzed articles, round-robin by topic |
-| Telegram Digest | `POST /api/digest/send` | Idempotent per day; schedule runs wait for the preferred hour |
+| Telegram Digest | `POST /api/digest/send` | Loops over every reader; idempotent per reader and day; schedule runs wait for each reader's preferred hour |
 | Finish Run | `POST /api/workflow/runs/:id/finish` | Final status from the recorded steps |
 
 Each HTTP node retries (2–3 tries) and uses `neverError`, so a failing step is recorded on the run instead of killing the execution.
@@ -57,6 +57,6 @@ curl -s -X POST http://localhost:3000/api/pipeline/daily \
   -H "content-type: application/json" \
   -H "x-ingest-secret: dev-insightloop-secret" \
   -d '{"analyzeLimit":5,"dryRunDigest":true}'
-
-curl -s http://localhost:3000/api/digest/preview
 ```
+
+`/api/digest/preview` needs a signed-in session (it previews the current reader's digest), so open it in the browser.

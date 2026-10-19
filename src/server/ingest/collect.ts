@@ -4,10 +4,10 @@ import { db } from "../db/client";
 import {
   articles,
   ingestRuns,
-  preferences,
   sources,
   type TopicSlug,
 } from "../db/schema";
+import { getFollowedTopics } from "../followed-topics";
 import { normalizeRssItem, type NormalizedArticle, type RawFeedItem } from "./normalize";
 
 const MAX_ITEMS_PER_SOURCE = 30;
@@ -85,7 +85,7 @@ async function collectSource(source: SourceRow) {
 }
 
 export async function collectFromEnabledSources(options?: {
-  /** If true, only sources whose topic is in preferences.selectedTopics */
+  /** If true, only sources whose topic at least one user follows */
   respectPreferences?: boolean;
 }): Promise<CollectResult> {
   const respectPreferences = options?.respectPreferences ?? true;
@@ -104,10 +104,7 @@ export async function collectFromEnabledSources(options?: {
   try {
     let topicFilter: TopicSlug[] | null = null;
     if (respectPreferences) {
-      const [prefs] = await db.select().from(preferences).limit(1);
-      if (prefs?.selectedTopics?.length) {
-        topicFilter = prefs.selectedTopics;
-      }
+      topicFilter = await getFollowedTopics();
     }
 
     const enabledSources = await db

@@ -11,6 +11,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { DEFAULT_TOPICS } from "@/lib/topics";
 import { db } from "./db/client";
 import {
   articleAnalyses,
@@ -19,11 +20,12 @@ import {
   ingestRuns,
   preferences,
   sources,
+  userArticles,
   workflowRuns,
   type TopicSlug,
 } from "./db/schema";
 import { getTotalCostUsd } from "./ai/analyze";
-import { telegramConfigured } from "./digest/telegram";
+import { telegramBotConfigured } from "./digest/telegram";
 import { groqConfigured } from "./pipeline/steps";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,8 +61,8 @@ const articleSelect = {
   summary: articleAnalyses.summary,
   relevanceScore: articleAnalyses.relevanceScore,
   tags: articleAnalyses.topics,
-  savedAt: articles.savedAt,
-  feedback: articles.feedback,
+  savedAt: userArticles.savedAt,
+  feedback: userArticles.feedback,
 };
 
 function toItem(row: Omit<ArticleListItem, "tags"> & { tags: string[] | null }): ArticleListItem {
@@ -69,23 +71,29 @@ function toItem(row: Omit<ArticleListItem, "tags"> & { tags: string[] | null }):
 
 const recency = sql`coalesce(${articles.publishedAt}, ${articles.fetchedAt})`;
 
-function articleQuery(where: SQL | undefined) {
+/** Shared article + analysis, joined with this user's saved/feedback state. */
+function articleQuery(userId: string, where: SQL | undefined) {
   return db
     .select(articleSelect)
     .from(articles)
     .innerJoin(sources, eq(articles.sourceId, sources.id))
     .leftJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .leftJoin(userArticles, and(eq(userArticles.articleId, articles.id), eq(userArticles.userId, userId)))
     .where(where);
 }
 
-export async function getPreferences() {
-  const [prefs] = await db.select().from(preferences).limit(1);
+export async function getPreferences(userId: string) {
+  const [prefs] = await db.select().from(preferences).where(eq(preferences.userId, userId)).limit(1);
   if (prefs) return prefs;
-  const [created] = await db.insert(preferences).values({}).returning();
-  return created;
+  const [created] = await db
+    .insert(preferences)
+    .values({ userId, selectedTopics: [...DEFAULT_TOPICS] })
+    .onConflictDoNothing({ target: preferences.userId })
+    .returning();
+  return created ?? (await db.select().from(preferences).where(eq(preferences.userId, userId)).limit(1))[0];
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(userId: string) {
   const since = new Date(Date.now() - DAY_MS);
   const weekAgo = new Date(Date.now() - 7 * DAY_MS);
 
@@ -98,33 +106,33 @@ export async function getDashboardStats() {
       articleAnalyses,
       and(gte(articleAnalyses.relevanceScore, 8), gte(articleAnalyses.analyzedAt, since)),
     ),
-    db.$count(articles, isNotNull(articles.savedAt)),
+    db.$count(userArticles, and(eq(userArticles.userId, userId), isNotNull(userArticles.savedAt))),
     db.$count(
       digests,
-      and(gte(digests.createdAt, weekAgo), inArray(digests.status, ["sent", "dry_run"])),
+      and(eq(digests.userId, userId), gte(digests.createdAt, weekAgo), inArray(digests.status, ["sent", "dry_run"])),
     ),
   ]);
 
   return { total, newToday, analyzed, high, highToday, saved, newsletters };
 }
 
-/** Top analyzed picks, at most one per topic first so the grid stays diverse. */
-export async function getHighlights(limit = 4): Promise<ArticleListItem[]> {
-  const prefs = await getPreferences();
+/** Top analyzed picks in the user's topics, at most one per topic first so the grid stays diverse. */
+export async function getHighlights(userId: string, limit = 4): Promise<ArticleListItem[]> {
+  const prefs = await getPreferences(userId);
   const topics = prefs.selectedTopics.length ? prefs.selectedTopics : undefined;
   const since = new Date(Date.now() - 3 * DAY_MS);
 
   const baseWhere = and(
     isNotNull(articleAnalyses.relevanceScore),
     topics ? inArray(articles.topic, topics) : undefined,
-    sql`${articles.feedback} is distinct from 'down'`,
+    sql`${userArticles.feedback} is distinct from 'down'`,
   );
 
-  let rows = await articleQuery(and(baseWhere, gte(articles.fetchedAt, since)))
+  let rows = await articleQuery(userId, and(baseWhere, gte(articles.fetchedAt, since)))
     .orderBy(desc(articleAnalyses.relevanceScore), desc(recency))
     .limit(40);
   if (rows.length < limit) {
-    rows = await articleQuery(baseWhere)
+    rows = await articleQuery(userId, baseWhere)
       .orderBy(desc(articleAnalyses.relevanceScore), desc(recency))
       .limit(40);
   }
@@ -145,9 +153,16 @@ export async function getHighlights(limit = 4): Promise<ArticleListItem[]> {
   return picked.map(toItem);
 }
 
-/** Latest AI summaries, interleaved by topic so one busy feed can't fill the list. */
-export async function listRecentlyAnalyzed(limit = 6): Promise<ArticleListItem[]> {
-  const rows = await articleQuery(isNotNull(articleAnalyses.id))
+/** Latest AI summaries in the user's topics, interleaved so one busy feed can't fill the list. */
+export async function listRecentlyAnalyzed(userId: string, limit = 6): Promise<ArticleListItem[]> {
+  const prefs = await getPreferences(userId);
+  const rows = await articleQuery(
+    userId,
+    and(
+      isNotNull(articleAnalyses.id),
+      prefs.selectedTopics.length ? inArray(articles.topic, prefs.selectedTopics) : undefined,
+    ),
+  )
     .orderBy(desc(articleAnalyses.analyzedAt))
     .limit(limit * 6);
 
@@ -170,13 +185,12 @@ export type ArticleFilters = {
   topic?: TopicSlug;
   minScore?: number;
   analyzedOnly?: boolean;
-  savedOnly?: boolean;
   sort?: "score" | "recent";
   limit?: number;
   offset?: number;
 };
 
-export async function listArticles(filters: ArticleFilters) {
+export async function listArticles(userId: string, filters: ArticleFilters) {
   const q = filters.q?.trim();
   const where = and(
     q
@@ -189,7 +203,6 @@ export async function listArticles(filters: ArticleFilters) {
     filters.topic ? eq(articles.topic, filters.topic) : undefined,
     filters.minScore ? gte(articleAnalyses.relevanceScore, filters.minScore) : undefined,
     filters.analyzedOnly ? isNotNull(articleAnalyses.id) : undefined,
-    filters.savedOnly ? isNotNull(articles.savedAt) : undefined,
   );
 
   const order =
@@ -199,7 +212,7 @@ export async function listArticles(filters: ArticleFilters) {
 
   const limit = filters.limit ?? 24;
   const [rows, total] = await Promise.all([
-    articleQuery(where)
+    articleQuery(userId, where)
       .orderBy(...order)
       .limit(limit)
       .offset(filters.offset ?? 0),
@@ -214,12 +227,12 @@ export async function listArticles(filters: ArticleFilters) {
   return { items: rows.map(toItem), total };
 }
 
-export async function listSavedArticles() {
-  const rows = await articleQuery(isNotNull(articles.savedAt)).orderBy(desc(articles.savedAt));
+export async function listSavedArticles(userId: string) {
+  const rows = await articleQuery(userId, isNotNull(userArticles.savedAt)).orderBy(desc(userArticles.savedAt));
   return rows.map(toItem);
 }
 
-export async function getArticle(id: string) {
+export async function getArticle(userId: string, id: string) {
   if (!UUID_RE.test(id)) return null;
   const [row] = await db
     .select({
@@ -237,6 +250,7 @@ export async function getArticle(id: string) {
     .from(articles)
     .innerJoin(sources, eq(articles.sourceId, sources.id))
     .leftJoin(articleAnalyses, eq(articleAnalyses.articleId, articles.id))
+    .leftJoin(userArticles, and(eq(userArticles.articleId, articles.id), eq(userArticles.userId, userId)))
     .where(eq(articles.id, id))
     .limit(1);
 
@@ -249,8 +263,9 @@ export async function getArticle(id: string) {
   };
 }
 
-export async function getRelatedArticles(id: string, topic: TopicSlug, limit = 3) {
+export async function getRelatedArticles(userId: string, id: string, topic: TopicSlug, limit = 3) {
   const rows = await articleQuery(
+    userId,
     and(eq(articles.topic, topic), ne(articles.id, id), isNotNull(articleAnalyses.relevanceScore)),
   )
     .orderBy(desc(recency), desc(articleAnalyses.relevanceScore))
@@ -258,13 +273,18 @@ export async function getRelatedArticles(id: string, topic: TopicSlug, limit = 3
   return rows.map(toItem);
 }
 
-export async function listDigests(limit = 14) {
-  return db.select().from(digests).orderBy(desc(digests.createdAt)).limit(limit);
+export async function listDigests(userId: string, limit = 14) {
+  return db
+    .select()
+    .from(digests)
+    .where(eq(digests.userId, userId))
+    .orderBy(desc(digests.createdAt))
+    .limit(limit);
 }
 
-export async function getArticlesByIds(ids: string[]): Promise<ArticleListItem[]> {
+export async function getArticlesByIds(userId: string, ids: string[]): Promise<ArticleListItem[]> {
   if (ids.length === 0) return [];
-  const rows = await articleQuery(inArray(articles.id, ids));
+  const rows = await articleQuery(userId, inArray(articles.id, ids));
   const byId = new Map(rows.map((r) => [r.id, toItem(r)]));
   return ids.map((id) => byId.get(id)).filter((a): a is ArticleListItem => Boolean(a));
 }
@@ -319,22 +339,26 @@ export async function getWeeklyActivity(): Promise<DayActivity[]> {
 }
 
 export async function getAiUsage() {
-  const [tokens, costUsd] = await Promise.all([
+  const [tokens, feedback, costUsd] = await Promise.all([
     db
       .select({
         analyzed: sql<number>`count(*)::int`,
         avgScore: sql<number>`coalesce(avg(${articleAnalyses.relevanceScore}), 0)::float`,
         promptTokens: sql<number>`coalesce(sum(${articleAnalyses.promptTokens}), 0)::int`,
         completionTokens: sql<number>`coalesce(sum(${articleAnalyses.completionTokens}), 0)::int`,
-        upvotes: sql<number>`count(*) filter (where ${articles.feedback} = 'up')::int`,
-        downvotes: sql<number>`count(*) filter (where ${articles.feedback} = 'down')::int`,
       })
       .from(articleAnalyses)
-      .innerJoin(articles, eq(articles.id, articleAnalyses.articleId))
+      .then((r) => r[0]),
+    db
+      .select({
+        upvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'up')::int`,
+        downvotes: sql<number>`count(*) filter (where ${userArticles.feedback} = 'down')::int`,
+      })
+      .from(userArticles)
       .then((r) => r[0]),
     getTotalCostUsd(),
   ]);
-  return { ...tokens, costUsd };
+  return { ...tokens, ...feedback, costUsd };
 }
 
 export async function getIntegrationStatus() {
@@ -349,7 +373,7 @@ export async function getIntegrationStatus() {
   return {
     groq: groqConfigured(),
     groqModel: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
-    telegram: telegramConfigured(),
+    telegramBot: telegramBotConfigured(),
     n8n: n8nOnline,
     pipelineSecret: Boolean(process.env.INGEST_SECRET),
   };

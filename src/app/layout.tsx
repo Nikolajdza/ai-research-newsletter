@@ -1,9 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { Suspense } from "react";
-import { MobileNav } from "@/components/shell/mobile-nav";
-import { Sidebar, SidebarProfile } from "@/components/shell/sidebar";
-import { Topbar } from "@/components/shell/topbar";
 import { appConfig } from "@/lib/config";
 import "./globals.css";
 
@@ -21,22 +17,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full">
-        <div className="flex min-h-screen">
-          <Sidebar
-            profile={
-              <Suspense fallback={<div className="h-12" />}>
-                <SidebarProfile />
-              </Suspense>
-            }
-          />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar />
-            <main className="flex-1 px-4 pb-28 pt-4 sm:px-6 lg:px-8 lg:pb-10">{children}</main>
-          </div>
-        </div>
-        <MobileNav />
-      </body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
