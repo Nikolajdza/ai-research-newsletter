@@ -15,18 +15,22 @@ function createDb(): Db {
     throw new Error("DATABASE_URL is not set. Copy .env.example → .env");
   }
 
+  const isSupabase = connectionString.includes("supabase.co");
+  // Transaction pooler + max:1 deadlocks when pages fire Promise.all of several queries
+  // (home dashboard does 7+ counts). Allow a small pool; keep prepare off for PgBouncer.
   const client =
     globalForDb.postgresClient ??
     postgres(connectionString, {
-      // Serverless (Vercel) should use Supabase's transaction pooler and a single connection.
-      max: process.env.VERCEL ? 1 : 10,
+      max: process.env.VERCEL ? 5 : 10,
       prepare: false,
-      ssl: process.env.DATABASE_URL?.includes("supabase.co") ? "require" : undefined,
+      connect_timeout: 15,
+      idle_timeout: 20,
+      max_lifetime: 60 * 5,
+      ssl: isSupabase ? "require" : undefined,
     });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForDb.postgresClient = client;
-  }
+  // Reuse across warm serverless invocations (and local HMR).
+  globalForDb.postgresClient = client;
 
   return drizzle(client, { schema });
 }
