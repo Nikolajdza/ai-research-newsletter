@@ -343,7 +343,7 @@ export async function sendDigestAction(options: { force: boolean }): Promise<Act
 
 export async function analyzeArticleAction(articleId: string): Promise<ActionResult> {
   await requireUser();
-  if (!groqConfigured()) return { ok: false, message: "GROQ_API_KEY_NEWSLETTER is not set" };
+  if (!groqConfigured()) return { ok: false, message: "No LLM provider configured (Groq / Gemini / OpenRouter)" };
   try {
     const result = await analyzeArticleById(idSchema.parse(articleId));
     refresh();
@@ -360,7 +360,7 @@ export async function analyzeArticleAction(articleId: string): Promise<ActionRes
 
 export async function analyzeBatchAction(limit: number): Promise<ActionResult> {
   await requireAdmin();
-  if (!groqConfigured()) return { ok: false, message: "GROQ_API_KEY_NEWSLETTER is not set" };
+  if (!groqConfigured()) return { ok: false, message: "No LLM provider configured (Groq / Gemini / OpenRouter)" };
   try {
     const r = await analyzeUnanalyzedArticles({ limit: Math.min(Math.max(limit, 1), 30) });
     bustArticleCaches();

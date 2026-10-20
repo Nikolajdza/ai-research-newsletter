@@ -28,7 +28,7 @@ const STEPS: { icon: LucideIcon; title: string; body: string; tone: string }[] =
   {
     icon: BrainCircuit,
     title: "Analyze",
-    body: "An LLM on Groq reads each new article and returns a summary, key takeaways, why it matters and a 1–10 relevance score. The output is validated with a Zod schema before it touches the database.",
+    body: "An LLM (Groq, with Gemini / OpenRouter failover) reads each new article and returns a summary, key takeaways, why it matters and a 1–10 relevance score. The output is validated with a Zod schema before it touches the database.",
     tone: "text-violet-300 bg-violet-500/15",
   },
   {
@@ -64,7 +64,7 @@ const DETAILS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ShieldCheck,
     title: "Built to run free",
-    body: "Next.js on Vercel, Postgres on Supabase, Groq's free tier and the Telegram Bot API — no paid services.",
+    body: "Next.js on Vercel, Postgres on Supabase, free-tier LLMs and the Telegram Bot API — no paid services required.",
   },
 ];
 

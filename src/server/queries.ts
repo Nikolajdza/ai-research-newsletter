@@ -27,7 +27,7 @@ import {
 } from "./db/schema";
 import { getTotalCostUsd } from "./ai/analyze";
 import { telegramBotConfigured } from "./digest/telegram";
-import { groqConfigured } from "./pipeline/steps";
+import { configuredProviders, llmConfigured, llmStatusLabel } from "./ai/llm";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -476,8 +476,9 @@ export async function getIntegrationStatus() {
     n8nOnline = false;
   }
   return {
-    groq: groqConfigured(),
-    groqModel: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
+    groq: llmConfigured(),
+    groqModel: llmStatusLabel(),
+    llmProviders: configuredProviders(),
     telegramBot: telegramBotConfigured(),
     n8n: n8nOnline,
     pipelineSecret: Boolean(process.env.INGEST_SECRET),

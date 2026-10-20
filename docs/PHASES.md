@@ -86,4 +86,8 @@ Uncached (always live): Preferences, Settings, Welcome, Workflow, live digest pr
 
 Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyze, save, feedback.
 
-Next (outside cache): loading shells, AI provider failover.
+## Phase 10 — Loading shells & LLM failover
+
+- `loading.tsx` for `(app)`, Discover, Welcome
+- LLM chain in `src/server/ai/llm.ts`: Groq → Gemini → OpenRouter (`LLM_PROVIDER_ORDER`)
+- Optional env: `GEMINI_API_KEY`, `OPENROUTER_API_KEY` (+ model overrides)

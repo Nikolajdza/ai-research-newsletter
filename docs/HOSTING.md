@@ -32,7 +32,7 @@ openssl rand -hex 32   # CRON_SECRET
 openssl rand -hex 32   # TELEGRAM_WEBHOOK_SECRET
 ```
 
-Keep Groq and Telegram values from local `.env` (`GROQ_API_KEY_NEWSLETTER`, `TELEGRAM_BOT_TOKEN`).
+Keep Groq and Telegram values from local `.env` (`GROQ_API_KEY_NEWSLETTER`, `TELEGRAM_BOT_TOKEN`). Optionally add `GEMINI_API_KEY` and/or `OPENROUTER_API_KEY` for LLM failover.
 
 ## 3. Vercel project
 
@@ -47,8 +47,10 @@ Keep Groq and Telegram values from local `.env` (`GROQ_API_KEY_NEWSLETTER`, `TEL
 | `NEXT_PUBLIC_APP_URL` | `https://<your-project>.vercel.app` (update after the first deploy if the slug differs) |
 | `INGEST_SECRET` | from step 2 |
 | `CRON_SECRET` | from step 2 |
-| `GROQ_API_KEY_NEWSLETTER` | Groq key |
+| `GROQ_API_KEY_NEWSLETTER` | Groq key (primary LLM) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` (same as local) |
+| `GEMINI_API_KEY` | Optional failover |
+| `OPENROUTER_API_KEY` | Optional failover |
 | `TELEGRAM_BOT_TOKEN` | BotFather token |
 | `TELEGRAM_BOT_USERNAME` | bot username without `@` |
 | `TELEGRAM_WEBHOOK_SECRET` | from step 2 |

@@ -249,7 +249,7 @@ async function WorkflowMonitor() {
                 👍 {usage.upvotes} · 👎 {usage.downvotes}
               </dd>
             </dl>
-            <p className="mt-3 text-[11px] text-muted">Model: {status.groqModel}. Each article is analyzed once — never re-scored.</p>
+            <p className="mt-3 text-[11px] text-muted">LLM: {status.groqModel}. Each article is analyzed once — never re-scored.</p>
           </section>
 
           <section className="card p-5 text-sm">

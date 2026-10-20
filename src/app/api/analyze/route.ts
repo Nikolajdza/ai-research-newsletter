@@ -1,7 +1,7 @@
 import { assertPipelineSecret, readPipelineBody, stepResponse } from "@/lib/pipeline-auth";
 import { runAnalyzeStep } from "@/server/pipeline/steps";
 
-/** n8n step 2: structured Groq analysis (Zod-validated) for unanalyzed articles. */
+/** n8n step 2: structured LLM analysis (Zod-validated) for unanalyzed articles. */
 export async function POST(request: Request) {
   const denied = assertPipelineSecret(request);
   if (denied) return denied;
@@ -12,6 +12,6 @@ export async function POST(request: Request) {
 
   const outcome = await runAnalyzeStep(body.runId, limit);
   return outcome.ok
-    ? stepResponse(body, { ok: true, ...(outcome.result ?? { skipped: "groq_not_configured" }) })
+    ? stepResponse(body, { ok: true, ...(outcome.result ?? { skipped: "llm_not_configured" }) })
     : stepResponse(body, { ok: false, error: outcome.error });
 }

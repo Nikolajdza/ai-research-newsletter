@@ -1,4 +1,5 @@
 import { analyzeUnanalyzedArticles, type AnalyzeBatchResult } from "../ai/analyze";
+import { llmConfigured } from "../ai/llm";
 import { sendDailyDigests, type DigestBatchResult, type DigestOptions } from "../digest/send";
 import { collectFromEnabledSources, type CollectResult } from "../ingest/collect";
 import { appendStep } from "./runs";
@@ -14,8 +15,9 @@ function errorMessage(err: unknown): string {
   return message.slice(0, 300);
 }
 
+/** True if any LLM provider (Groq / Gemini / OpenRouter) has a key. */
 export function groqConfigured(): boolean {
-  return Boolean(process.env.GROQ_API_KEY_NEWSLETTER || process.env.GROQ_API_KEY);
+  return llmConfigured();
 }
 
 /** Each step never throws: failures are recorded on the run and returned. */
@@ -44,7 +46,7 @@ export async function runAnalyzeStep(
 ): Promise<StepOutcome<AnalyzeBatchResult | null>> {
   if (!groqConfigured()) {
     if (runId) {
-      await appendStep(runId, { name: "analyze", status: "skipped", detail: "GROQ_API_KEY_NEWSLETTER missing" });
+      await appendStep(runId, { name: "analyze", status: "skipped", detail: "No LLM provider configured" });
     }
     return { ok: true, result: null };
   }

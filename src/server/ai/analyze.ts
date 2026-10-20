@@ -7,7 +7,8 @@ import {
   type TopicKey,
 } from "../db/schema";
 import { getFollowedTopics } from "../followed-topics";
-import { analyzeArticleWithGroq, estimateCostUsd } from "./groq";
+import { analyzeArticleWithLlm } from "./llm";
+import { estimateCostUsd } from "./groq";
 
 const ANALYZE_CONCURRENCY = 2;
 const RECENT_WINDOW_DAYS = 4;
@@ -101,7 +102,7 @@ async function pickPending(limit: number, topics: TopicKey[]): Promise<PendingAr
 }
 
 async function analyzeAndPersist(article: PendingArticle, selectedTopics: TopicKey[]) {
-  const llm = await analyzeArticleWithGroq({ ...article, selectedTopics });
+  const llm = await analyzeArticleWithLlm({ ...article, selectedTopics });
 
   const [row] = await db
     .insert(articleAnalyses)

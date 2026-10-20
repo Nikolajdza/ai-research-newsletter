@@ -1,10 +1,9 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { customTopicKey, isTopicSlug, TOPIC_SLUGS, TOPICS, type TopicKey, type TopicSlug } from "@/lib/topics";
-import { groqJson } from "../ai/groq";
+import { llmConfigured, llmJson } from "../ai/llm";
 import { db } from "../db/client";
 import { articles, customTopics, sources } from "../db/schema";
-import { groqConfigured } from "../pipeline/steps";
 import { previewFeed } from "./fetch-feed";
 
 const MAX_CANDIDATES = 6;
@@ -91,9 +90,9 @@ async function suggest(input: string): Promise<Suggestion> {
     feeds: [],
     subreddits: [],
   };
-  if (!groqConfigured()) return fallback;
+  if (!llmConfigured()) return fallback;
   try {
-    const parsed = suggestionSchema.safeParse(await groqJson(systemPrompt(), `Topic: ${input}`));
+    const parsed = suggestionSchema.safeParse(await llmJson(systemPrompt(), `Topic: ${input}`));
     return parsed.success ? parsed.data : fallback;
   } catch {
     return fallback;

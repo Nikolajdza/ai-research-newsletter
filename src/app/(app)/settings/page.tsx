@@ -71,7 +71,11 @@ async function SettingsContent() {
         <section className="card p-5">
           <h2 className="font-semibold">Integrations</h2>
           <div className="mt-2 divide-y divide-line">
-            <Row ok={status.groq} label="Groq LLM" detail={status.groq ? `Model ${status.groqModel}` : "Set GROQ_API_KEY_NEWSLETTER"} />
+            <Row
+              ok={status.groq}
+              label="LLM"
+              detail={status.groq ? status.groqModel : "Set GROQ_API_KEY_NEWSLETTER, GEMINI_API_KEY, or OPENROUTER_API_KEY"}
+            />
             <Row
               ok={status.telegramBot}
               label="Telegram bot"
