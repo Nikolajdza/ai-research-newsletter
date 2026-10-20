@@ -91,3 +91,10 @@ Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyz
 - `loading.tsx` for `(app)`, Discover, Welcome
 - LLM chain in `src/server/ai/llm.ts`: Groq → Gemini → OpenRouter (`LLM_PROVIDER_ORDER`)
 - Optional env: `GEMINI_API_KEY`, `OPENROUTER_API_KEY` (+ model overrides)
+
+## Phase 11 — Portfolio & demo readiness
+
+- README: live URL, stack, demo walkthrough, pipeline table, status through phase 11
+- [DEMO.md](DEMO.md): smoke checks (signed-out, member, admin, Cron, LLM failover)
+- Open Graph / Twitter metadata on the root layout
+- Host empty-state copy aligned with daily (not hourly) prod Cron

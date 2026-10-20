@@ -7,7 +7,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     service: "ai-research-newsletter",
-    phase: 8,
+    phase: 11,
     timestamp: new Date().toISOString(),
   });
 }

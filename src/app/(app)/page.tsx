@@ -76,7 +76,7 @@ async function Dashboard() {
             description={
               isAdmin
                 ? "Run the pipeline to collect RSS feeds and let AI score them. It takes about a minute."
-                : "New stories in your topics are scored every hour. Check back soon or follow more topics."
+                : "New stories in your topics are scored on the daily pipeline run. Check back soon or follow more topics."
             }
             action={
               isAdmin ? (

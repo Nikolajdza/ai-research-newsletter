@@ -8,7 +8,7 @@ RSS sources (multi-topic)
     → Collect (HTTP/RSS)
     → Clean + canonical URL dedupe
     → Persist (Postgres)
-    → AI analyze once (structured JSON + Zod)
+    → AI analyze once (structured JSON + Zod; Groq → Gemini → OpenRouter)
     → Select top diverse items (scheduled)
     → Deliver digest (Telegram; email later)
     → Dashboard feedback loop
@@ -16,22 +16,19 @@ RSS sources (multi-topic)
 
 ## Topics (user-chosen)
 
-Not tech-only. Preferences pick which buckets to follow, e.g.:
-
-`ai-ml` · `web-dev` · `business` · `sports` · `world` · `science` · `health` · `productivity`
-
-Each RSS source maps to one primary topic. Ingest respects `preferences.selectedTopics`.
+Curated catalog (25 topics in 5 groups) plus custom `c-*` topics from discovery. Each RSS source maps to one primary topic. Collect/analyze cover the **union** of every reader’s followed topics; digests stay personal.
 
 ## Runtime pieces
 
 | Piece | Role | Phase |
 |-------|------|-------|
 | Next.js | Dashboard + API routes that pipeline / Cron / n8n call | 1+ |
-| Postgres | Sources, articles, analyses, prefs, ingest runs (Docker `:5433` locally; Supabase in prod) | 1–2 |
+| Postgres | Sources, articles, analyses, prefs, users, digests (Docker `:5433` locally; Supabase in prod) | 1–2, 6 |
 | n8n (Docker) | Local hourly schedule (`:5679`) | 1 setup, 4 wire-up |
 | Vercel Cron | Production daily run (`GET /api/pipeline/daily` at 05:00 UTC) | 8 |
-| Groq (or similar) | Structured article analysis | 3 |
-| Telegram Bot | Daily digest delivery | 4 |
+| LLM | Structured analysis + topic discovery (failover chain) | 3, 10 |
+| Telegram Bot | Daily digest delivery | 4, 6 |
+| Cache Components | Feed / article / personal TTL + tag bust | 9 |
 
 ## Design constraints (learning focus)
 

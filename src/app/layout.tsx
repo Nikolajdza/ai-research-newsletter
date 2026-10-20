@@ -5,9 +5,26 @@ import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
+const siteUrl = appConfig.urls.app;
+const description =
+  "Multi-topic RSS research, scored by AI once, delivered as a personal daily Telegram digest.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: { default: `${appConfig.name} — ${appConfig.tagline}`, template: `%s · ${appConfig.name}` },
-  description: "Multi-topic RSS research, scored by AI, delivered as a daily digest.",
+  description,
+  openGraph: {
+    title: `${appConfig.name} — ${appConfig.tagline}`,
+    description,
+    url: siteUrl,
+    siteName: appConfig.name,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${appConfig.name} — ${appConfig.tagline}`,
+    description,
+  },
 };
 
 export const viewport: Viewport = {

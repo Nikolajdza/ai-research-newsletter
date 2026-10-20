@@ -96,6 +96,8 @@ Trigger a run without waiting until 05:00 UTC:
 
 ## Checks
 
+Full checklist: [DEMO.md](DEMO.md).
+
 - `GET /api/health` → `{ ok: true }`
 - `/discover` works signed out
 - Login, Explore, Preferences

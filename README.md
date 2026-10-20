@@ -1,104 +1,106 @@
-# InsightLoop — AI Research & Newsletter
+# InsightLoop
 
-Multi-topic RSS (25 curated topics from AI to Formula 1, plus anything a reader types) → one structured AI pass per article (Groq + Zod) → Postgres → a personal, idempotent daily Telegram digest for every reader. Orchestrated by n8n locally (Vercel Cron in production), browsable in a Next.js dashboard with accounts and a public Discover page.
+**Live:** [ai-research-newsletter.vercel.app](https://ai-research-newsletter.vercel.app)
 
-**Demo flow:** browse `/discover` → sign up → pick 3+ topics on `/welcome` or type your own (“Elden Ring”, “Partizan košarka”) → connect Telegram → feeds are scored by AI → one card per story lands in your chat.
+Multi-topic RSS → one structured AI pass per article (Zod-validated) → Postgres → a personal daily Telegram digest. Next.js dashboard with accounts, public Discover, and a free Vercel + Supabase deploy.
 
-## Quick start
+**Try it:** open [/discover](https://ai-research-newsletter.vercel.app/discover) → register → pick 3+ topics on `/welcome` (or type your own) → Settings → Connect Telegram → wait for the daily run (or ask an admin to **Workflow → Run now**).
+
+## Why this project
+
+Built as a portfolio piece focused on **pipeline orchestration**, not a chatbot UI:
+
+- Reliable RSS ingest + canonical URL dedupe
+- Structured LLM output with Zod validation (analyze once, never re-score)
+- Multi-reader personalization (shared articles, per-user prefs / digests / feedback)
+- Local n8n workflow + production Vercel Cron
+- Cache Components + LLM failover (Groq → Gemini → OpenRouter)
+
+## Stack
+
+| Layer | Choice |
+|-------|--------|
+| App | Next.js 16 (App Router, Cache Components), TypeScript, Tailwind |
+| Data | Postgres (Docker locally, Supabase in prod), Drizzle ORM |
+| AI | Groq primary; optional Gemini / OpenRouter failover |
+| Automation | n8n (local Docker) · Vercel Cron (prod, once/day) |
+| Delivery | Telegram Bot API (card-style digest with photos) |
+| Hosting | Vercel Hobby + Supabase Free (~$0) |
+
+## Demo walkthrough
+
+1. **Public** — [/discover](https://ai-research-newsletter.vercel.app/discover) and [/how-it-works](https://ai-research-newsletter.vercel.app/how-it-works) work signed out.
+2. **Sign up** — first account is **admin** (sources, pipeline, integrations); later accounts are members.
+3. **Onboarding** — `/welcome`: pick ≥3 catalog topics or type a niche (“Elden Ring”, “Partizan”).
+4. **Telegram** — Settings → Connect → `/start <token>` in the bot → Check connection.
+5. **Digest** — Newsletter shows history + Telegram preview; Cron sends daily at **05:00 UTC**.
+
+Full production checklist: [docs/DEMO.md](docs/DEMO.md).
+
+## Quick start (local)
 
 ```bash
 npm install
-cp .env.example .env      # set GROQ_API_KEY_NEWSLETTER and TELEGRAM_BOT_TOKEN
+cp .env.example .env      # GROQ_API_KEY_NEWSLETTER, TELEGRAM_BOT_TOKEN
 
 npm run infra:up          # Postgres :5433, n8n :5679
 npm run db:push && npm run db:seed
 npm run pipeline:run -- --dry-run --analyze=20
-npm run dev               # http://localhost:3000 → Get started
-npm run n8n:import        # loads n8n/workflows/daily-digest.json into the container
+npm run dev               # http://localhost:3000
+npm run n8n:import        # optional — loads n8n/workflows/daily-digest.json
 ```
 
-The first account you register becomes the **admin** (manages sources, runs the pipeline, sees integration health). Everyone after that is a **member** with their own topics, saved list, feedback and digest.
+Optional failover keys: `GEMINI_API_KEY`, `OPENROUTER_API_KEY` (see `.env.example`).
 
-## Accounts & personalization
+Production deploy: [docs/HOSTING.md](docs/HOSTING.md).
 
-- **Auth**: email + password (scrypt), sessions stored in Postgres (`sessions`, only a SHA-256 of the cookie token is kept), `il_session` httpOnly cookie for 30 days. `src/proxy.ts` sends signed-out visitors to `/discover` (home) or `/login`.
-- **Shared vs. personal data**: articles and AI analyses are shared (each article is analyzed once). `preferences`, `user_articles` (saved + 👍/👎) and `digests` are per user.
-- **Collect what readers follow**: collect and analyze run over the union of every reader's topics.
-- **Your digest**: your topics, your minimum score, max 2 stories per topic, minus anything you 👎'd.
+## What you get in the app
 
-## Topics
-
-- **Curated catalog**: 25 topics in 5 groups (Tech, Money, Sports, World & Science, Culture & Life) with seeded feeds.
-- **Add any topic** (`/preferences`): type a team, game, hobby or company, or paste an RSS link. Groq proposes a Google News search feed (in the right language/region), site feeds and subreddits; every candidate is fetched and parsed server-side (public hosts only, 10 s / 3 MB limits, stale feeds dropped) before you pick up to 4.
-- **Shared custom topics**: stored in `custom_topics` with a `c-<Label>` key. The next reader who types the same topic gets the existing feeds, so nothing is collected twice.
-- **Instant start**: following a custom topic collects it and analyzes its first stories in the background, so it shows up in Explore within a minute.
-- **Free-tier limits**: 5 custom topics per reader, 15 discovery searches per hour.
-
-## Dashboard
-
-| Page | What it shows |
-|------|---------------|
-| `/welcome` | First-run topic picker: catalog cards by group (World preselected), “type anything” discovery, min 3 topics → builds the first feed |
-| `/discover` | Public, read-only: this week's best analyzed stories across curated topics, topic chips, stats |
-| `/discover/[id]` | Public story view: summary, why it matters, takeaways, link to source |
-| `/how-it-works` | Public explainer and sign-up CTA |
-| `/login`, `/register` | Auth |
-| `/` Home | Greeting, your stats, top highlights, recent AI summaries in your topics, pipeline + digest status |
-| `/articles` Explore | Search, topic chips, min-score / sort filters, pagination, “Analyze 8 more” (admin) |
-| `/articles/[id]` | Summary, why it matters, takeaways, action items, relevance gauge, save, 👍/👎 feedback |
-| `/newsletter` | Your digest, Telegram card preview, send / rebuild, history |
-| `/saved` | Your reading list |
-| `/sources` | Feeds per topic and health; add / toggle / delete for the admin |
-| `/workflow` | n8n node diagram with live step status, execution log, 7-day stats, AI tokens & cost |
-| `/preferences` | Grouped topic catalog, “Add any topic” discovery, your custom topics, digest time + timezone, min score, format, Telegram toggle |
-| `/settings` | Display name, Connect Telegram, sign out, integration health (admin) |
-
-Mobile layout uses a bottom tab bar (Home, Saved, Digest, Sources, Settings).
+| Route | Role |
+|-------|------|
+| `/discover` | Public week’s best analyzed stories |
+| `/welcome` | First-run topic picker |
+| `/` | Personalized home (stats, highlights, pipeline status) |
+| `/articles` | Explore: search, filters, pagination |
+| `/articles/[id]` | AI summary, takeaways, save, 👍/👎 |
+| `/newsletter` | Digest + Telegram card preview + history |
+| `/sources` | Feed health (admin manage) |
+| `/workflow` | Pipeline monitor, cost, feedback |
+| `/preferences` | Topics, score threshold, digest time, Telegram |
+| `/settings` | Profile, Connect Telegram, integration health |
 
 ## Pipeline
 
-| Step | CLI | API (header `x-ingest-secret`) |
-|------|-----|-----|
+| Step | CLI | API (`x-ingest-secret`) |
+|------|-----|-------------------------|
 | Collect + dedupe | `npm run ingest:run` | `POST /api/ingest/collect` |
 | Analyze | `npm run analyze:run -- 10` | `POST /api/analyze` |
 | Digest (all readers) | `npm run digest:send -- --dry-run` | `POST /api/digest/send` |
-| Full | `npm run pipeline:run -- --dry-run` | `POST /api/pipeline/daily` |
+| Full day | `npm run pipeline:run -- --dry-run` | `GET/POST /api/pipeline/daily` |
 
-- **Dedupe**: canonical URL (tracking params stripped) with a unique index; re-runs only update metadata.
-- **Analyze once**: `article_analyses.article_id` is unique; Groq 429s are waited out, Zod rejects malformed output.
-- **Idempotent digest**: one row per `(user, digest_date, channel)`. A second send the same day → `already_sent`. Readers without a connected chat get a `dry_run` row.
-- **Schedule-aware**: the hourly trigger only sends to a reader once their preferred hour has passed in their timezone.
-
-## n8n
-
-`Manual / Schedule (hourly) → Start Run → RSS Read + Dedupe → AI Agent → Telegram Digest → Finish Run`
-
-Every n8n execution creates a `workflow_runs` row, so it appears on `/workflow`. See [n8n/README.md](n8n/README.md).
+- **Dedupe** — canonical URL unique index (tracking params stripped).
+- **Analyze once** — unique `article_analyses.article_id`; 429s retried; Zod rejects bad JSON; failover across providers.
+- **Idempotent digest** — one row per `(user, digest_date, channel)`.
+- **Prod schedule** — Hobby Cron once/day (not hourly). Local n8n can still run hourly.
 
 ## Telegram
 
-The digest is sent the way channels post: a header message, then one card per story — photo (from the feed) with an HTML caption and a “Read article ↗” button. Stories without an image fall back to a text message with a large link preview.
+Header message + one photo card per story (HTML caption + “Read article ↗”). No image → text + link preview.
 
-1. `@BotFather` → `/newbot` → put the token in `TELEGRAM_BOT_TOKEN`, restart `npm run dev`.
-2. In the app: **Settings → Connect Telegram**. This opens `t.me/<bot>?start=<one-time token>`.
-3. Press **Start** in Telegram, then **Check connection** in the app. The bot replies “✅ Connected”. `/stop` in the chat disconnects.
-
-Locally, “Check connection” polls `getUpdates`. In production, register a webhook once so the bot links chats instantly:
-
-```bash
-curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -d url=https://<your-app>/api/telegram/webhook \
-  -d secret_token=$TELEGRAM_WEBHOOK_SECRET
-```
+1. `@BotFather` → token in `TELEGRAM_BOT_TOKEN`
+2. App: **Settings → Connect Telegram** → Start in chat
+3. Prod: set webhook once (see [HOSTING.md](docs/HOSTING.md))
 
 ## Docs
 
+- [Demo & smoke checks](docs/DEMO.md)
+- [Hosting ($0)](docs/HOSTING.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Hosting](docs/HOSTING.md) — Vercel + Supabase + daily Cron ($0)
 - [Phases](docs/PHASES.md)
-- [UX](docs/UX_REFERENCE.md)
 - [n8n](n8n/README.md)
 
 ## Status
 
-**Phases 1–8** (8 = Vercel + Supabase + daily Cron). Local Docker + n8n still work. Out of scope for now: autonomous agents, RAG / vector DB, WebSockets, email blasts, login-walled scraping.
+**Phases 1–11** complete (through portfolio README + demo checklist).
+
+Out of scope for now: email digests, RAG / vector DB, WebSockets, login-walled scraping, autonomous agents.
