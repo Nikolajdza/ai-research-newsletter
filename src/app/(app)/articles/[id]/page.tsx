@@ -14,7 +14,7 @@ import { Thumb } from "@/components/ui/thumb";
 import { formatDate, readMinutes, requestNow, scoreLabel } from "@/lib/format";
 import { estimateCostUsd } from "@/server/ai/groq";
 import { requireUser } from "@/server/auth/session";
-import { getArticle, getRelatedArticles } from "@/server/queries";
+import { cachedArticleDetail } from "@/server/cache";
 
 export default function ArticlePage(props: PageProps<"/articles/[id]">) {
   return (
@@ -33,10 +33,9 @@ async function ArticleDetail({ params }: Pick<PageProps<"/articles/[id]">, "para
   await connection();
   const user = await requireUser();
   const { id } = await params;
-  const article = await getArticle(user.id, id);
-  if (!article) notFound();
-
-  const related = await getRelatedArticles(user.id, article.id, article.topic);
+  const detail = await cachedArticleDetail(user.id, id);
+  if (!detail) notFound();
+  const { article, related } = detail;
   const now = requestNow();
   const score = article.relevanceScore;
   const tags = [...new Set(article.tags)].slice(0, 8);

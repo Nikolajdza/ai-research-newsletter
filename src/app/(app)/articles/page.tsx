@@ -8,8 +8,8 @@ import { ActionButton } from "@/components/ui/action-button";
 import { EmptyState, PageHeader, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
 import { requireUser } from "@/server/auth/session";
+import { cachedExplore } from "@/server/cache";
 import { isTopicSlug, topicMeta, type TopicKey } from "@/lib/topics";
-import { getPreferences, listArticles } from "@/server/queries";
 
 export const metadata = { title: "Explore" };
 
@@ -23,12 +23,12 @@ type Filters = {
   page: number;
 };
 
-function parseFilters(sp: Record<string, string | string[] | undefined>, followed: TopicKey[]): Filters {
+function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
   const get = (key: string) => (Array.isArray(sp[key]) ? sp[key]?.[0] : sp[key]) ?? "";
-  const topic = get("topic");
+  const topic = get("topic").slice(0, 60);
   return {
     q: get("q").slice(0, 100),
-    topic: isTopicSlug(topic) || followed.includes(topic) ? topic : undefined,
+    topic: topic && (isTopicSlug(topic) || /^[\w-]+$/i.test(topic)) ? (topic as TopicKey) : undefined,
     min: Math.min(Math.max(Number(get("min")) || 0, 0), 10),
     sort: get("sort") === "recent" ? "recent" : "score",
     page: Math.max(1, Number(get("page")) || 1),
@@ -79,21 +79,20 @@ async function AnalyzeMoreButton() {
 async function Results({ searchParams }: Pick<PageProps<"/articles">, "searchParams">) {
   await connection();
   const user = await requireUser();
-  const prefs = await getPreferences(user.id);
-  const filters = parseFilters(await searchParams, prefs.selectedTopics);
-  const now = requestNow();
-  const chips = [
-    ...prefs.selectedTopics,
-    ...(filters.topic && !prefs.selectedTopics.includes(filters.topic) ? [filters.topic] : []),
-  ];
-  const { items, total } = await listArticles(user.id, {
-    q: filters.q,
+  const filters = parseFilters(await searchParams);
+  const { prefs, items, total } = await cachedExplore(user.id, {
+    q: filters.q || undefined,
     topic: filters.topic,
     minScore: filters.min || undefined,
     sort: filters.sort,
     limit: PAGE_SIZE,
     offset: (filters.page - 1) * PAGE_SIZE,
   });
+  const now = requestNow();
+  const chips = [
+    ...prefs.selectedTopics,
+    ...(filters.topic && !prefs.selectedTopics.includes(filters.topic) ? [filters.topic] : []),
+  ];
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const chip = (active: boolean) =>

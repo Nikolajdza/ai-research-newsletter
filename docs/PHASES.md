@@ -72,8 +72,18 @@ All five phases are complete.
 - Serverless DB client: small short-lived pool, `prepare: false`, SSL for Supabase
 - Step-by-step: [HOSTING.md](HOSTING.md)
 
-## Phase 9 — Cache & speed (in progress)
+## Phase 9 — Cache & speed
 
-- `"use cache"` + `cacheLife('minutes'|'hours')` for Discover feed/detail and personalized Home
-- Tags: `discover`, `articles`, `user:<id>` — busted after pipeline / topic changes (`revalidateTag`)
-- Next: Explore list cache, loading.tsx shells, AI provider failover
+Custom `cacheLife` profiles in `next.config.ts` + helpers in `src/server/cache.ts`:
+
+| Profile    | stale | revalidate | expire | Used for                         |
+|------------|-------|------------|--------|----------------------------------|
+| `feed`     | 60s   | 5 min      | 1 h    | Discover, Home, Explore          |
+| `article`  | 2 min | 30 min     | 6 h    | Public + personal article detail |
+| `personal` | 30s   | 2 min      | 30 min | Saved list, digest history       |
+
+Uncached (always live): Preferences, Settings, Welcome, Workflow, live digest preview when history is empty.
+
+Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyze, save, feedback.
+
+Next (outside cache): loading shells, AI provider failover.

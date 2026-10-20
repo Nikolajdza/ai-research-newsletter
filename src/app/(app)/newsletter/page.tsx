@@ -11,9 +11,10 @@ import { Thumb } from "@/components/ui/thumb";
 import { formatDate, formatHour, formatTime, requestNow } from "@/lib/format";
 import { topicMeta } from "@/lib/topics";
 import { requireUser } from "@/server/auth/session";
+import { cachedDigestHistory } from "@/server/cache";
 import { selectDigestItems } from "@/server/digest/select";
 import { telegramBotConfigured } from "@/server/digest/telegram";
-import { getArticlesByIds, getPreferences, listDigests, type ArticleListItem } from "@/server/queries";
+import { getArticlesByIds, type ArticleListItem } from "@/server/queries";
 
 export const metadata = { title: "Newsletter" };
 
@@ -65,24 +66,26 @@ export default function NewsletterPage(props: PageProps<"/newsletter">) {
 
 async function Newsletter({ searchParams }: Pick<PageProps<"/newsletter">, "searchParams">) {
   await connection();
-  const { id } = await searchParams;
+  const sp = await searchParams;
+  const digestId = typeof sp.id === "string" ? sp.id : Array.isArray(sp.id) ? sp.id[0] : undefined;
   const now = requestNow();
   const user = await requireUser();
-  const [prefs, history] = await Promise.all([getPreferences(user.id), listDigests(user.id, 14)]);
+  const { prefs, history, selected, items: historyItems } = await cachedDigestHistory(user.id, digestId);
 
-  const selected = history.find((d) => d.id === id) ?? history[0] ?? null;
-  let articleIds = selected?.articleIds ?? [];
+  let items = historyItems;
   let digestDate = selected?.digestDate ?? "";
   let isPreview = false;
 
+  // Live "what would send now" when the user has no digest history yet.
   if (!selected) {
     const selection = await selectDigestItems(prefs);
-    articleIds = selection.items.map((i) => i.id);
     digestDate = selection.digestDate;
     isPreview = true;
+    items = await getArticlesByIds(
+      user.id,
+      selection.items.map((i) => i.id),
+    );
   }
-
-  const items = await getArticlesByIds(user.id, articleIds);
   const [featured, ...rest] = items;
   const botReady = telegramBotConfigured();
   const connected = botReady && Boolean(prefs.telegramChatId);

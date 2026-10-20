@@ -65,6 +65,7 @@ export async function toggleSaveAction(articleId: string): Promise<ActionResult>
     .where(and(eq(userArticles.articleId, id), eq(userArticles.userId, user.id)));
   const saved = !row?.savedAt;
   await upsertUserArticle(user.id, id, { savedAt: saved ? new Date() : null });
+  bustArticleCaches(user.id);
   refresh();
   return { ok: true, message: saved ? "Saved" : "Removed from saved" };
 }
@@ -74,6 +75,7 @@ export async function setFeedbackAction(articleId: string, value: "up" | "down" 
   const id = idSchema.parse(articleId);
   const feedback = z.enum(["up", "down"]).nullable().parse(value);
   await upsertUserArticle(user.id, id, { feedback });
+  bustArticleCaches(user.id);
   refresh();
   return { ok: true, message: feedback ? "Thanks for the feedback" : "Feedback cleared" };
 }

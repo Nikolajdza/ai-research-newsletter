@@ -5,7 +5,7 @@ import { ArticleCard, ArticleRow } from "@/components/article/article-card";
 import { EmptyState, PageHeader, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
 import { requireUser } from "@/server/auth/session";
-import { listSavedArticles } from "@/server/queries";
+import { cachedSavedList } from "@/server/cache";
 
 export const metadata = { title: "Saved Articles" };
 
@@ -24,7 +24,7 @@ async function SavedList() {
   await connection();
   const now = requestNow();
   const user = await requireUser();
-  const items = await listSavedArticles(user.id);
+  const items = await cachedSavedList(user.id);
 
   if (items.length === 0) {
     return (
