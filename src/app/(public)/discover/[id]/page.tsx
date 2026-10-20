@@ -1,13 +1,12 @@
 import { ArrowLeft, ArrowRight, ExternalLink, Lightbulb, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { ScorePill, TopicChip } from "@/components/ui/badges";
 import { Skeleton } from "@/components/ui/layout";
 import { Thumb } from "@/components/ui/thumb";
 import { formatDate } from "@/lib/format";
-import { getPublicArticle } from "@/server/queries";
+import { cachedPublicArticle } from "@/server/cache";
 
 export default function PublicArticlePage(props: PageProps<"/discover/[id]">) {
   return (
@@ -23,9 +22,8 @@ export default function PublicArticlePage(props: PageProps<"/discover/[id]">) {
 }
 
 async function PublicArticle({ params }: Pick<PageProps<"/discover/[id]">, "params">) {
-  await connection();
   const { id } = await params;
-  const article = await getPublicArticle(id);
+  const article = await cachedPublicArticle(id);
   if (!article) notFound();
 
   return (

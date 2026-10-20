@@ -10,14 +10,7 @@ import { EmptyState, PageSkeleton, SectionHeader } from "@/components/ui/layout"
 import { StatCard } from "@/components/ui/stat-card";
 import { greeting, localHour, requestNow, timeAgo } from "@/lib/format";
 import { requireUser } from "@/server/auth/session";
-import {
-  getDashboardStats,
-  getHighlights,
-  getPreferences,
-  listRecentlyAnalyzed,
-  listDigests,
-  listWorkflowRuns,
-} from "@/server/queries";
+import { cachedUserHome } from "@/server/cache";
 
 export default function HomePage() {
   return (
@@ -32,13 +25,7 @@ async function Dashboard() {
   const user = await requireUser();
   const isAdmin = user.role === "admin";
   const now = requestNow();
-  // Sequential DB access — parallel fan-out hangs on Supabase PgBouncer in warm isolates.
-  const prefs = await getPreferences(user.id);
-  const stats = await getDashboardStats(user.id);
-  const highlights = await getHighlights(user.id, 4);
-  const latest = await listRecentlyAnalyzed(user.id, 6);
-  const [lastRun] = await listWorkflowRuns(1);
-  const [lastDigest] = await listDigests(user.id, 1);
+  const { prefs, stats, highlights, latest, lastRun, lastDigest } = await cachedUserHome(user.id);
   const hour = localHour(prefs.timezone, now);
 
   return (

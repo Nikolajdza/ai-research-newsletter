@@ -1,12 +1,11 @@
 import { ArrowRight, BrainCircuit, Newspaper, Rss } from "lucide-react";
 import Link from "next/link";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { ArticleCard, ArticleRow } from "@/components/article/article-card";
 import { EmptyState, PageSkeleton } from "@/components/ui/layout";
 import { requestNow } from "@/lib/format";
 import { isTopicSlug, topicMeta, type TopicSlug } from "@/lib/topics";
-import { getPublicStats, listPublicArticles, listPublicTopics } from "@/server/queries";
+import { cachedDiscoverPage } from "@/server/cache";
 
 export const metadata = {
   title: "Discover",
@@ -36,16 +35,13 @@ export default function DiscoverPage(props: PageProps<"/discover">) {
 }
 
 async function Feed({ searchParams }: Pick<PageProps<"/discover">, "searchParams">) {
-  await connection();
   const sp = await searchParams;
   const get = (key: string) => (Array.isArray(sp[key]) ? sp[key]?.[0] : sp[key]) ?? "";
   const topic: TopicSlug | undefined = isTopicSlug(get("topic")) ? (get("topic") as TopicSlug) : undefined;
   const page = Math.max(1, Number(get("page")) || 1);
   const now = requestNow();
 
-  const { items, total } = await listPublicArticles({ topic, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
-  const topics = await listPublicTopics();
-  const stats = await getPublicStats();
+  const { items, total, topics, stats } = await cachedDiscoverPage(topic, page, PAGE_SIZE);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (patch: { topic?: string; page?: number }) => {
     const params = new URLSearchParams();

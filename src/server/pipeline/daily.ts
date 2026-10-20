@@ -1,3 +1,4 @@
+import { bustArticleCaches } from "../cache";
 import { finishRun, getRun, respectsSchedule, startRun, type RunTrigger } from "./runs";
 import { runAnalyzeStep, runCollectStep, runDigestStep } from "./steps";
 
@@ -33,6 +34,7 @@ export async function runDailyPipeline(options?: {
   });
 
   await finishRun(run.id);
+  bustArticleCaches();
   const finished = await getRun(run.id);
 
   return {

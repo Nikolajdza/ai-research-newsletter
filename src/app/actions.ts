@@ -24,6 +24,7 @@ import { sendDigestForUser } from "@/server/digest/send";
 import { discoverSources, type DiscoveryResult } from "@/server/discovery/discover";
 import { previewFeed } from "@/server/discovery/fetch-feed";
 import { collectFromEnabledSources } from "@/server/ingest/collect";
+import { bustArticleCaches } from "@/server/cache";
 import { runDailyPipeline } from "@/server/pipeline/daily";
 import { groqConfigured } from "@/server/pipeline/steps";
 import { getPreferences } from "@/server/queries";
@@ -102,6 +103,7 @@ export async function savePreferencesAction(input: PreferencesInput): Promise<Ac
     .update(preferences)
     .set({ ...parsed.data, selectedTopics, updatedAt: new Date() })
     .where(eq(preferences.userId, user.id));
+  bustArticleCaches(user.id);
   refresh();
   return { ok: true, message: "Preferences saved" };
 }
@@ -153,6 +155,7 @@ export async function followTopicAction(key: string): Promise<ActionResult> {
   const [known] = await knownTopics([key]);
   if (!known) return { ok: false, message: "Unknown topic" };
   await setFollowed(user.id, (current) => [...current, known]);
+  bustArticleCaches(user.id);
   refresh();
   return { ok: true, message: `Following ${topicMeta(known).label}` };
 }
@@ -161,6 +164,7 @@ export async function unfollowTopicAction(key: string): Promise<ActionResult> {
   const user = await requireUser();
   const next = await setFollowed(user.id, (current) => current.filter((k) => k !== key));
   if (next.length === 0) await setFollowed(user.id, () => [key]);
+  bustArticleCaches(user.id);
   refresh();
   return next.length === 0
     ? { ok: false, message: "Keep at least one topic" }
@@ -184,7 +188,9 @@ export async function finishOnboardingAction(curated: string[]): Promise<ActionR
   after(async () => {
     await collectFromEnabledSources({ topics: selectedTopics });
     if (groqConfigured()) await analyzeUnanalyzedArticles({ limit: 12, topics: selectedTopics });
+    bustArticleCaches(user.id);
   });
+  bustArticleCaches(user.id);
   redirect("/");
 }
 
@@ -240,8 +246,10 @@ export async function followCustomTopicAction(input: z.input<typeof followCustom
   after(async () => {
     await collectFromEnabledSources({ topics: [key] });
     if (groqConfigured()) await analyzeUnanalyzedArticles({ limit: 6, topics: [key] });
+    bustArticleCaches(user.id);
   });
 
+  bustArticleCaches(user.id);
   refresh();
   return {
     ok: true,
@@ -353,6 +361,7 @@ export async function analyzeBatchAction(limit: number): Promise<ActionResult> {
   if (!groqConfigured()) return { ok: false, message: "GROQ_API_KEY_NEWSLETTER is not set" };
   try {
     const r = await analyzeUnanalyzedArticles({ limit: Math.min(Math.max(limit, 1), 30) });
+    bustArticleCaches();
     refresh();
     return {
       ok: r.failed === 0,

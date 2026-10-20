@@ -69,5 +69,11 @@ All five phases are complete.
 
 - Production: Vercel Hobby + Supabase Postgres + Vercel Cron (Hobby = once per day)
 - `GET /api/pipeline/daily` from Cron (`Authorization: Bearer CRON_SECRET`) at 05:00 UTC; sends every reader’s digest (no hourly wait)
-- Serverless DB client: one connection, `prepare: false`, SSL for Supabase
+- Serverless DB client: small short-lived pool, `prepare: false`, SSL for Supabase
 - Step-by-step: [HOSTING.md](HOSTING.md)
+
+## Phase 9 — Cache & speed (in progress)
+
+- `"use cache"` + `cacheLife('minutes'|'hours')` for Discover feed/detail and personalized Home
+- Tags: `discover`, `articles`, `user:<id>` — busted after pipeline / topic changes (`revalidateTag`)
+- Next: Explore list cache, loading.tsx shells, AI provider failover
