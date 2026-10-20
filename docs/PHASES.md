@@ -98,3 +98,9 @@ Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyz
 - [DEMO.md](DEMO.md): smoke checks (signed-out, member, admin, Cron, LLM failover)
 - Open Graph / Twitter metadata on the root layout
 - Host empty-state copy aligned with daily (not hourly) prod Cron
+
+## Phase 12 — DB retention (stay on free tier)
+
+- Daily pipeline step `retention`: delete articles older than 30 days (saved kept); also old digests / workflow + ingest logs
+- Auto-tighten to **14 days** if DB ≥ ~380 MB or ≥ ~35k articles (Supabase free ~500 MB)
+- Admin **Settings → Database**: size bar, row counts, retention mode (`ARTICLE_RETENTION_DAYS`)

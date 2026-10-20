@@ -101,6 +101,6 @@ Header message + one photo card per story (HTML caption + “Read article ↗”
 
 ## Status
 
-**Phases 1–11** complete (through portfolio README + demo checklist).
+**Phases 1–12** complete (incl. 30-day DB retention + admin storage meter for Supabase free).
 
 Out of scope for now: email digests, RAG / vector DB, WebSockets, login-walled scraping, autonomous agents.

@@ -2,6 +2,7 @@ import { analyzeUnanalyzedArticles, type AnalyzeBatchResult } from "../ai/analyz
 import { llmConfigured } from "../ai/llm";
 import { sendDailyDigests, type DigestBatchResult, type DigestOptions } from "../digest/send";
 import { collectFromEnabledSources, type CollectResult } from "../ingest/collect";
+import { runRetentionCleanup, type RetentionResult } from "./retention";
 import { appendStep } from "./runs";
 
 export type StepOutcome<T> =
@@ -102,6 +103,31 @@ export async function runDigestStep(
     return { ok: true, result };
   } catch (err) {
     if (runId) await appendStep(runId, { name: "digest", status: "failed", detail: errorMessage(err) });
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
+/** Drop articles / logs older than retention window (saved articles kept). */
+export async function runRetentionStep(runId?: string): Promise<StepOutcome<RetentionResult>> {
+  try {
+    const result = await runRetentionCleanup();
+    if (runId) {
+      const parts = [
+        `${result.retentionDays}d`,
+        result.articlesDeleted && `${result.articlesDeleted} articles`,
+        result.digestsDeleted && `${result.digestsDeleted} digests`,
+        result.workflowRunsDeleted && `${result.workflowRunsDeleted} runs`,
+        result.ingestRunsDeleted && `${result.ingestRunsDeleted} ingest logs`,
+      ].filter(Boolean);
+      await appendStep(runId, {
+        name: "retention",
+        status: "completed",
+        detail: parts.length > 1 ? parts.join(" · ") : `${result.retentionDays}d · nothing to purge (${result.reason})`,
+      });
+    }
+    return { ok: true, result };
+  } catch (err) {
+    if (runId) await appendStep(runId, { name: "retention", status: "failed", detail: errorMessage(err) });
     return { ok: false, error: errorMessage(err) };
   }
 }

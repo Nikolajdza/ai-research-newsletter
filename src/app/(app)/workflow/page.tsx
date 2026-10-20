@@ -9,6 +9,7 @@ import {
   Play,
   Rss,
   Send,
+  Trash2,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -75,6 +76,7 @@ async function WorkflowMonitor() {
     { icon: GitMerge, title: "Merge", subtitle: "Canonical URL dedupe", tone: "text-teal-300 bg-teal-500/15", step: stepOf("collect") },
     { icon: BrainCircuit, title: "AI Agent", subtitle: "Score & summarize", tone: "text-violet-300 bg-violet-500/15", step: stepOf("analyze") },
     { icon: Send, title: "Telegram", subtitle: "Send digest", tone: "text-blue-300 bg-blue-500/15", step: stepOf("digest") },
+    { icon: Trash2, title: "Retention", subtitle: "Purge >30d (keep saved)", tone: "text-amber-300 bg-amber-500/15", step: stepOf("retention") },
   ];
 
   const weekFetched = activity.reduce((s, d) => s + d.fetched, 0);
@@ -116,7 +118,7 @@ async function WorkflowMonitor() {
       </div>
 
       <section className="card overflow-x-auto p-5">
-        <div className="flex min-w-[760px] items-stretch gap-2">
+          <div className="flex min-w-[920px] items-stretch gap-2">
           {nodes.map((node, i) => (
             <div key={node.title} className="flex flex-1 items-center gap-2">
               <div className="flex flex-1 flex-col items-center rounded-2xl border border-line bg-panel-2 p-4 text-center">

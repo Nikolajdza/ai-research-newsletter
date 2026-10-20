@@ -1,6 +1,6 @@
 import { bustArticleCaches } from "../cache";
 import { finishRun, getRun, respectsSchedule, startRun, type RunTrigger } from "./runs";
-import { runAnalyzeStep, runCollectStep, runDigestStep } from "./steps";
+import { runAnalyzeStep, runCollectStep, runDigestStep, runRetentionStep } from "./steps";
 
 export type DailyPipelineResult = {
   workflowRunId: string;
@@ -32,6 +32,7 @@ export async function runDailyPipeline(options?: {
     dryRun: options?.dryRunDigest,
     respectSchedule: options?.respectSchedule ?? respectsSchedule(trigger),
   });
+  await runRetentionStep(run.id);
 
   await finishRun(run.id);
   bustArticleCaches();
