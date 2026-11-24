@@ -4,14 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { setTelegramDigestsAction, type ActionResult } from "@/app/actions";
 
-export function DigestToggle({
-  enabled,
-  globalOn,
-}: {
-  enabled: boolean;
-  /** Server DIGESTS_ENABLED env */
-  globalOn: boolean;
-}) {
+export function DigestToggle({ enabled }: { enabled: boolean }) {
   const [pending, startTransition] = useTransition();
   const [on, setOn] = useState(enabled);
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -28,13 +21,24 @@ export function DigestToggle({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium">Daily Telegram digest</p>
-          <p className="text-xs text-muted">
-            {globalOn
-              ? "Server delivery is on. Toggle below for your account."
-              : "Server delivery is off (DIGESTS_ENABLED). Pipeline still collects & analyzes; nothing is sent until you set DIGESTS_ENABLED=true on Vercel."}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium">Daily Telegram digest</p>
+            <span
+              className={`rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${
+                on
+                  ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/25"
+                  : "bg-white/[0.04] text-muted ring-line"
+              }`}
+            >
+              {on ? "On" : "Off"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {on
+              ? "Cron will send your scored stories to Telegram when the chat is connected."
+              : "Off for your account. New readers are asked once after signup; you can turn this on anytime."}
           </p>
         </div>
         <button

@@ -403,29 +403,45 @@ export async function disconnectTelegramAction(): Promise<ActionResult> {
   return { ok: true, message: "Telegram disconnected" };
 }
 
-/** Per-user Telegram digest opt-in (also needs DIGESTS_ENABLED=true on the server). */
+/** Per-user Telegram digest opt-in (stored on preferences.telegram_enabled). */
 export async function setTelegramDigestsAction(enabled: boolean): Promise<ActionResult> {
   const user = await requireUser();
   await getPreferences(user.id);
   await db
     .update(preferences)
-    .set({ telegramEnabled: enabled, updatedAt: new Date() })
+    .set({
+      telegramEnabled: enabled,
+      digestPromptedAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(eq(preferences.userId, user.id));
   bustArticleCaches(user.id);
   refresh();
   return {
     ok: true,
-    message: enabled
-      ? "Digest delivery enabled for your account (server DIGESTS_ENABLED must also be true)"
-      : "Digest delivery disabled for your account",
+    message: enabled ? "Daily Telegram digest enabled" : "Daily Telegram digest disabled",
   };
 }
 
-/** Admin: turn off Telegram digests for every account (keeps chats linked). */
-export async function disableAllDigestsAction(): Promise<ActionResult> {
-  await requireAdmin();
-  await db.update(preferences).set({ telegramEnabled: false, updatedAt: new Date() });
-  bustArticleCaches();
+/** First-run modal: Yes → enable digests; Not now → keep off but don't ask again. */
+export async function answerDigestPromptAction(enable: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  await getPreferences(user.id);
+  await db
+    .update(preferences)
+    .set({
+      telegramEnabled: enable,
+      digestPromptedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(preferences.userId, user.id));
+  bustArticleCaches(user.id);
   refresh();
-  return { ok: true, message: "Telegram digests disabled for all accounts" };
+  return {
+    ok: true,
+    message: enable
+      ? "Great — connect Telegram in Settings so cards can arrive."
+      : "No problem. You can turn digests on anytime in Settings.",
+    url: enable ? "/settings" : undefined,
+  };
 }

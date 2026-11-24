@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { DigestPromptGate } from "@/components/shell/digest-prompt-gate";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { OnboardingGate } from "@/components/shell/onboarding-gate";
 import { Sidebar, SidebarProfile } from "@/components/shell/sidebar";
@@ -23,6 +24,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <MobileNav />
       <Suspense fallback={null}>
         <OnboardingGate />
+      </Suspense>
+      <Suspense fallback={null}>
+        <DigestPromptGate />
       </Suspense>
     </>
   );

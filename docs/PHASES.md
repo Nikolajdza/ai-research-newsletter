@@ -106,8 +106,8 @@ Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyz
 - Auto-tighten to **14 days** if DB ≥ ~380 MB or ≥ ~35k articles (free ~500 MB)
 - Admin **Settings → Database**: size bar, row counts, retention mode (`ARTICLE_RETENTION_DAYS`)
 
-## Phase 13 — Stability, Neon, digests off
+## Phase 13 — Stability, Neon, per-user digests
 
-- Fix hangs: sequential DB reads on Settings/Sources; skip n8n probe on Vercel; Neon-ready pool + `attachDatabasePool`
-- Docs: production on Neon; [NEON.md](NEON.md) dump/restore from Supabase
-- Digests off by default (`DIGESTS_ENABLED`); Settings toggle + admin “disable all”
+- Fix hangs: sequential DB reads; Neon pool + `attachDatabasePool`; [NEON.md](NEON.md)
+- Per-user `telegram_enabled` + `digest_prompted_at`; Settings On/Off badge
+- Post-welcome modal asks once whether to enable digests; `DIGESTS_ENABLED=false` is emergency kill only

@@ -45,7 +45,7 @@ Keep Groq and Telegram values from local `.env`. Optionally add `GEMINI_API_KEY`
 | `TELEGRAM_BOT_TOKEN` | BotFather token |
 | `TELEGRAM_BOT_USERNAME` | without `@` |
 | `TELEGRAM_WEBHOOK_SECRET` | from step 2 |
-| `DIGESTS_ENABLED` | `false` until you want Cron to send Telegram digests |
+| `DIGESTS_ENABLED` | Optional kill switch — omit or `true`; set `false` to pause all sends |
 | `ARTICLE_RETENTION_DAYS` | Optional (default `30`) |
 
 ## 4. Schema + seed
@@ -66,15 +66,15 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -d secret_token=$TELEGRAM_WEBHOOK_SECRET
 ```
 
-## 6. Digests
+## 6. Digests (per user)
 
-Delivery is **off by default** (`DIGESTS_ENABLED` unset/false). Cron still collects, analyzes, and purges old rows.
+Each account has `telegram_enabled` in the DB (default **off**). After `/welcome`, a modal asks whether to enable digests. Settings shows an **On/Off** badge and toggle.
 
-To turn sends back on:
+Cron still collects / analyzes / purges. A send only happens when:
 
-1. Vercel env → `DIGESTS_ENABLED=true` → Redeploy
-2. Settings → enable **Daily Telegram digest** for your account
-3. Connect Telegram if needed
+1. That user’s digest toggle is **On**
+2. Telegram chat is connected
+3. Optional: `DIGESTS_ENABLED` is not set to `false` (emergency kill switch)
 
 ## Checks
 

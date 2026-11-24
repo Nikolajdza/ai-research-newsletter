@@ -161,11 +161,13 @@ export const preferences = pgTable("preferences", {
   digestHourLocal: integer("digest_hour_local").notNull().default(7),
   timezone: text("timezone").notNull().default("Europe/Belgrade"),
   digestFormat: text("digest_format").notNull().default("detailed"),
-  /** Opt-in: digests only send when this is true AND DIGESTS_ENABLED=true on the server. */
+  /** Per-user opt-in for Telegram digest cards. Default off until they accept the prompt. */
   telegramEnabled: boolean("telegram_enabled").notNull().default(false),
   emailEnabled: boolean("email_enabled").notNull().default(false),
   /** Null until the reader finishes /welcome. */
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  /** Null until they answer the post-signup digest prompt (Yes / Not now). */
+  digestPromptedAt: timestamp("digest_prompted_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

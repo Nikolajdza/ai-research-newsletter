@@ -2,12 +2,10 @@ import { CheckCircle2, LogOut, XCircle } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { disableAllDigestsAction } from "@/app/actions";
 import { logoutAction } from "@/app/auth-actions";
 import { DigestToggle } from "@/components/settings/digest-toggle";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { TelegramConnect } from "@/components/settings/telegram-connect";
-import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, Skeleton } from "@/components/ui/layout";
 import { appConfig } from "@/lib/config";
 import { formatDate } from "@/lib/format";
@@ -44,7 +42,6 @@ function Row({ ok, label, detail }: { ok: boolean; label: string; detail: string
 async function SettingsContent() {
   await connection();
   const user = await requireUser();
-  // Sequential — parallel queries on a max:1 pool hang forever on Vercel.
   const prefs = await getPreferences(user.id);
   const status = await getIntegrationStatus();
   const dbHealth = user.role === "admin" ? await getDatabaseHealth() : null;
@@ -64,7 +61,7 @@ async function SettingsContent() {
         <ProfileForm displayName={user.displayName} />
         <p className="mt-3 text-xs text-muted">
           Signed in as <span className="text-foreground">{user.email}</span>
-          {user.role === "admin" ? " · admin" : ""}. Topics, digest time and channels live in{" "}
+          {user.role === "admin" ? " · admin" : ""}. Topics and digest time live in{" "}
           <Link href="/preferences" className="text-accent">
             Preferences
           </Link>
@@ -74,13 +71,9 @@ async function SettingsContent() {
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Newsletter delivery</h2>
-        <DigestToggle enabled={prefs.telegramEnabled} globalOn={globalDigests} />
-        {user.role === "admin" && (
-          <div className="mt-4 border-t border-line pt-4">
-            <ActionButton action={disableAllDigestsAction} variant="secondary" pendingLabel="Disabling…">
-              Disable digests for all accounts
-            </ActionButton>
-          </div>
+        <DigestToggle enabled={prefs.telegramEnabled} />
+        {!prefs.telegramChatId && prefs.telegramEnabled && (
+          <p className="mt-3 text-xs text-amber-300">Connect Telegram below so digests have somewhere to go.</p>
         )}
       </section>
 
@@ -156,7 +149,7 @@ async function SettingsContent() {
               {dbHealth.oldestArticleAt
                 ? ` · oldest article ${formatDate(dbHealth.oldestArticleAt)}`
                 : " · no articles yet"}
-              . Override with env <code className="text-foreground">ARTICLE_RETENTION_DAYS</code>.
+              .
             </p>
           </section>
 
@@ -171,22 +164,22 @@ async function SettingsContent() {
               <Row
                 ok={status.telegramBot}
                 label="Telegram bot"
-                detail={status.telegramBot ? "Bot token configured — readers connect their own chat" : "Set TELEGRAM_BOT_TOKEN (dry runs until then)"}
+                detail={status.telegramBot ? "Bot token configured — readers connect their own chat" : "Set TELEGRAM_BOT_TOKEN"}
               />
               <Row
                 ok={globalDigests}
-                label="Digest sends"
+                label="Digest kill switch"
                 detail={
                   globalDigests
-                    ? "DIGESTS_ENABLED=true — Cron may send Telegram digests"
-                    : "DIGESTS_ENABLED off — Cron collects/analyzes only"
+                    ? "DIGESTS_ENABLED on (default) — each user’s Settings toggle decides sends"
+                    : "DIGESTS_ENABLED=false — no Telegram sends for anyone"
                 }
               />
-              <Row ok={status.n8n} label="n8n" detail={status.n8n ? `Reachable at ${appConfig.urls.n8n}` : "Not reachable (local only — production uses Vercel Cron)"} />
+              <Row ok={status.n8n} label="n8n" detail={status.n8n ? `Reachable at ${appConfig.urls.n8n}` : "Local only — production uses Vercel Cron"} />
               <Row
                 ok={status.pipelineSecret}
                 label="Pipeline secret"
-                detail={status.pipelineSecret ? "Pipeline APIs require x-ingest-secret" : "INGEST_SECRET not set — pipeline APIs are open"}
+                detail={status.pipelineSecret ? "Pipeline APIs require x-ingest-secret" : "INGEST_SECRET not set"}
               />
             </div>
           </section>
