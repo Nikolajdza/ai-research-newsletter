@@ -67,10 +67,11 @@ All five phases are complete.
 
 ## Phase 8 — Free hosting
 
-- Production: Vercel Hobby + Supabase Postgres + Vercel Cron (Hobby = once per day)
-- `GET /api/pipeline/daily` from Cron (`Authorization: Bearer CRON_SECRET`) at 05:00 UTC; sends every reader’s digest (no hourly wait)
-- Serverless DB client: small short-lived pool, `prepare: false`, SSL for Supabase
-- Step-by-step: [HOSTING.md](HOSTING.md)
+- Production: Vercel Hobby + Neon Postgres (was Supabase) + Vercel Cron (Hobby = once per day)
+- `GET /api/pipeline/daily` from Cron (`Authorization: Bearer CRON_SECRET`) at 05:00 UTC
+- Serverless DB: `max: 1`, `prepare: false`, SSL, `@vercel/functions` `attachDatabasePool`
+- Digests opt-in via `DIGESTS_ENABLED` + per-user Settings toggle
+- Step-by-step: [HOSTING.md](HOSTING.md) · migrate: [NEON.md](NEON.md)
 
 ## Phase 9 — Cache & speed
 
@@ -102,5 +103,11 @@ Bust: `bustArticleCaches(userId?)` from pipeline, prefs/follow/onboarding/analyz
 ## Phase 12 — DB retention (stay on free tier)
 
 - Daily pipeline step `retention`: delete articles older than 30 days (saved kept); also old digests / workflow + ingest logs
-- Auto-tighten to **14 days** if DB ≥ ~380 MB or ≥ ~35k articles (Supabase free ~500 MB)
+- Auto-tighten to **14 days** if DB ≥ ~380 MB or ≥ ~35k articles (free ~500 MB)
 - Admin **Settings → Database**: size bar, row counts, retention mode (`ARTICLE_RETENTION_DAYS`)
+
+## Phase 13 — Stability, Neon, digests off
+
+- Fix hangs: sequential DB reads on Settings/Sources; skip n8n probe on Vercel; Neon-ready pool + `attachDatabasePool`
+- Docs: production on Neon; [NEON.md](NEON.md) dump/restore from Supabase
+- Digests off by default (`DIGESTS_ENABLED`); Settings toggle + admin “disable all”

@@ -1,3 +1,4 @@
+import { attachDatabasePool } from "@vercel/functions";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -8,31 +9,56 @@ type Db = ReturnType<typeof drizzle<typeof schema>>;
 const globalForDb = globalThis as unknown as {
   postgresClient?: Sql;
   drizzleDb?: Db;
+  poolAttached?: boolean;
 };
 
 function connectionUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. Copy .env.example → .env");
-  // PgBouncer (Supabase transaction pooler) must not use prepared statements.
+
+  // Supabase transaction pooler needs the pgbouncer flag when missing.
   if (url.includes("pooler.supabase.com") && !url.includes("pgbouncer=true")) {
     return url.includes("?") ? `${url}&pgbouncer=true` : `${url}?pgbouncer=true`;
   }
   return url;
 }
 
+function needsSsl(url: string): boolean {
+  return (
+    url.includes("neon.tech") ||
+    url.includes("supabase.co") ||
+    url.includes("sslmode=require") ||
+    Boolean(process.env.VERCEL)
+  );
+}
+
 function createSql(): Sql {
   const url = connectionUrl();
   const onVercel = Boolean(process.env.VERCEL);
-  return postgres(url, {
-    // On Vercel, keep the pool tiny and short-lived. Stale sockets from a warm
-    // isolate were leaving every page stuck on its Suspense skeleton.
-    max: onVercel ? 3 : 10,
+  // Neon / Supabase poolers are transaction-mode PgBouncer: never prepare statements.
+  // max:1 avoids deadlocks when a request accidentally fires parallel queries on one isolate.
+  const client = postgres(url, {
+    max: onVercel ? 1 : 10,
     prepare: false,
     connect_timeout: 10,
-    idle_timeout: onVercel ? 5 : 20,
-    max_lifetime: onVercel ? 60 : 60 * 30,
-    ssl: url.includes("supabase.co") ? "require" : undefined,
+    idle_timeout: onVercel ? 20 : 20,
+    max_lifetime: onVercel ? 60 * 5 : 60 * 30,
+    ssl: needsSsl(url) ? "require" : undefined,
+    connection: {
+      application_name: "insightloop",
+    },
   });
+
+  if (onVercel && !globalForDb.poolAttached) {
+    try {
+      attachDatabasePool(client);
+      globalForDb.poolAttached = true;
+    } catch {
+      // Older runtimes may not support attach — pool still works with short lifetime.
+    }
+  }
+
+  return client;
 }
 
 function createDb(): Db {
@@ -46,6 +72,7 @@ export async function resetDbClient(): Promise<void> {
   const old = globalForDb.postgresClient;
   globalForDb.postgresClient = undefined;
   globalForDb.drizzleDb = undefined;
+  globalForDb.poolAttached = false;
   if (old) {
     try {
       await old.end({ timeout: 1 });

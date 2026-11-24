@@ -67,7 +67,8 @@ async function articleCount(): Promise<number> {
 /** Pick 30d or 14d based on size / row pressure so we stay on Supabase free. */
 export async function resolveRetentionDays(): Promise<{ days: number; reason: string; mode: "normal" | "tight" }> {
   const configured = envRetentionDays();
-  const [sizeBytes, articles] = await Promise.all([databaseSizeBytes(), articleCount()]);
+  const sizeBytes = await databaseSizeBytes();
+  const articles = await articleCount();
 
   if (sizeBytes >= DB_TIGHT_BYTES || articles >= ARTICLE_TIGHT_COUNT) {
     const days = Math.min(configured, TIGHT_RETENTION_DAYS);
@@ -85,8 +86,10 @@ export async function resolveRetentionDays(): Promise<{ days: number; reason: st
 }
 
 export async function getDatabaseHealth(): Promise<DatabaseHealth> {
+  // Neon free ~0.5 GB storage; Supabase free similar — one budget bar for both.
   const freePlanBytes = 500 * 1024 * 1024;
-  const [{ days, mode }, sizeBytes] = await Promise.all([resolveRetentionDays(), databaseSizeBytes()]);
+  const sizeBytes = await databaseSizeBytes();
+  const { days, mode } = await resolveRetentionDays();
 
   const counts = [
     ...(await db.execute<{

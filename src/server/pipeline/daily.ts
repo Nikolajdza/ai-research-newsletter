@@ -1,5 +1,6 @@
 import { bustArticleCaches } from "../cache";
-import { finishRun, getRun, respectsSchedule, startRun, type RunTrigger } from "./runs";
+import { digestsEnabled } from "../digest/enabled";
+import { appendStep, finishRun, getRun, respectsSchedule, startRun, type RunTrigger } from "./runs";
 import { runAnalyzeStep, runCollectStep, runDigestStep, runRetentionStep } from "./steps";
 
 export type DailyPipelineResult = {
@@ -9,7 +10,7 @@ export type DailyPipelineResult = {
 };
 
 /**
- * Full pipeline in one process: collect → analyze → digest.
+ * Full pipeline in one process: collect → analyze → digest → retention.
  * n8n calls the steps individually; the dashboard and CLI use this.
  */
 export async function runDailyPipeline(options?: {
@@ -27,11 +28,21 @@ export async function runDailyPipeline(options?: {
 
   if (!options?.skipCollect) await runCollectStep(run.id);
   if (!options?.skipAnalyze) await runAnalyzeStep(run.id, options?.analyzeLimit ?? 10);
-  await runDigestStep(run.id, {
-    force: options?.forceDigest,
-    dryRun: options?.dryRunDigest,
-    respectSchedule: options?.respectSchedule ?? respectsSchedule(trigger),
-  });
+
+  if (digestsEnabled()) {
+    await runDigestStep(run.id, {
+      force: options?.forceDigest,
+      dryRun: options?.dryRunDigest,
+      respectSchedule: options?.respectSchedule ?? respectsSchedule(trigger),
+    });
+  } else {
+    await appendStep(run.id, {
+      name: "digest",
+      status: "skipped",
+      detail: "DIGESTS_ENABLED is off — collect/analyze still ran",
+    });
+  }
+
   await runRetentionStep(run.id);
 
   await finishRun(run.id);

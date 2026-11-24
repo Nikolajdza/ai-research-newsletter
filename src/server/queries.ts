@@ -26,6 +26,7 @@ import {
   type TopicKey,
 } from "./db/schema";
 import { getTotalCostUsd } from "./ai/analyze";
+import { digestsEnabled } from "./digest/enabled";
 import { telegramBotConfigured } from "./digest/telegram";
 import { configuredProviders, llmConfigured, llmStatusLabel } from "./ai/llm";
 
@@ -467,13 +468,16 @@ export async function getAiUsage() {
 }
 
 export async function getIntegrationStatus() {
-  const n8nUrl = process.env.N8N_HEALTH_URL ?? `${process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5679"}/healthz`;
+  // Skip n8n probe on Vercel — local Docker only; a 1.5s timeout was slowing every Settings load.
   let n8nOnline = false;
-  try {
-    const res = await fetch(n8nUrl, { signal: AbortSignal.timeout(1500), cache: "no-store" });
-    n8nOnline = res.ok;
-  } catch {
-    n8nOnline = false;
+  if (!process.env.VERCEL) {
+    const n8nUrl = process.env.N8N_HEALTH_URL ?? `${process.env.NEXT_PUBLIC_N8N_URL ?? "http://localhost:5679"}/healthz`;
+    try {
+      const res = await fetch(n8nUrl, { signal: AbortSignal.timeout(800), cache: "no-store" });
+      n8nOnline = res.ok;
+    } catch {
+      n8nOnline = false;
+    }
   }
   return {
     groq: llmConfigured(),
@@ -482,5 +486,6 @@ export async function getIntegrationStatus() {
     telegramBot: telegramBotConfigured(),
     n8n: n8nOnline,
     pipelineSecret: Boolean(process.env.INGEST_SECRET),
+    digests: digestsEnabled(),
   };
 }

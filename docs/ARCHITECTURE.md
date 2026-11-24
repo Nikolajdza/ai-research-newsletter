@@ -23,7 +23,7 @@ Curated catalog (25 topics in 5 groups) plus custom `c-*` topics from discovery.
 | Piece | Role | Phase |
 |-------|------|-------|
 | Next.js | Dashboard + API routes that pipeline / Cron / n8n call | 1+ |
-| Postgres | Sources, articles, analyses, prefs, users, digests (Docker `:5433` locally; Supabase in prod) | 1–2, 6 |
+| Postgres | Sources, articles, analyses, prefs, users, digests (Docker `:5433` locally; Neon in prod) | 1–2, 6, 13 |
 | n8n (Docker) | Local hourly schedule (`:5679`) | 1 setup, 4 wire-up |
 | Vercel Cron | Production daily run (`GET /api/pipeline/daily` at 05:00 UTC) | 8 |
 | LLM | Structured analysis + topic discovery (failover chain) | 3, 10 |

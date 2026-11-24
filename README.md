@@ -21,11 +21,11 @@ Built as a portfolio piece focused on **pipeline orchestration**, not a chatbot 
 | Layer | Choice |
 |-------|--------|
 | App | Next.js 16 (App Router, Cache Components), TypeScript, Tailwind |
-| Data | Postgres (Docker locally, Supabase in prod), Drizzle ORM |
+| Data | Postgres (Docker locally, Neon in prod), Drizzle ORM |
 | AI | Groq primary; optional Gemini / OpenRouter failover |
 | Automation | n8n (local Docker) · Vercel Cron (prod, once/day) |
 | Delivery | Telegram Bot API (card-style digest with photos) |
-| Hosting | Vercel Hobby + Supabase Free (~$0) |
+| Hosting | Vercel Hobby + Neon Free (~$0) |
 
 ## Demo walkthrough
 
@@ -94,13 +94,13 @@ Header message + one photo card per story (HTML caption + “Read article ↗”
 ## Docs
 
 - [Demo & smoke checks](docs/DEMO.md)
-- [Hosting ($0)](docs/HOSTING.md)
+- [Hosting ($0)](docs/HOSTING.md) · [Neon migrate](docs/NEON.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Phases](docs/PHASES.md)
 - [n8n](n8n/README.md)
 
 ## Status
 
-**Phases 1–12** complete (incl. 30-day DB retention + admin storage meter for Supabase free).
+**Phases 1–13** complete (Neon hosting, retention, digests opt-in, hang fixes).
 
 Out of scope for now: email digests, RAG / vector DB, WebSockets, login-walled scraping, autonomous agents.

@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { digests, preferences } from "../db/schema";
+import { digestsEnabled } from "./enabled";
 import { formatTelegramDigest } from "./format";
 import { selectDigestItems, type PreferencesRow } from "./select";
 import { sendTelegramDigestCards, telegramBotConfigured } from "./telegram";
@@ -114,13 +115,15 @@ export async function sendDigestForUser(prefs: PreferencesRow, options: DigestOp
 
   const dryRunReason = options.dryRun
     ? "dry_run_requested"
-    : !prefs.telegramEnabled
-      ? "telegram_disabled_in_preferences"
-      : !telegramBotConfigured()
-        ? "telegram_bot_not_configured"
-        : !prefs.telegramChatId
-          ? "telegram_not_connected"
-          : null;
+    : !digestsEnabled()
+      ? "digests_disabled_globally"
+      : !prefs.telegramEnabled
+        ? "telegram_disabled_in_preferences"
+        : !telegramBotConfigured()
+          ? "telegram_bot_not_configured"
+          : !prefs.telegramChatId
+            ? "telegram_not_connected"
+            : null;
   const dryRun = dryRunReason !== null;
 
   if (existing && !options.force) {

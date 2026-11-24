@@ -2,12 +2,16 @@ import { CheckCircle2, LogOut, XCircle } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { disableAllDigestsAction } from "@/app/actions";
 import { logoutAction } from "@/app/auth-actions";
+import { DigestToggle } from "@/components/settings/digest-toggle";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { TelegramConnect } from "@/components/settings/telegram-connect";
+import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, Skeleton } from "@/components/ui/layout";
 import { appConfig } from "@/lib/config";
 import { formatDate } from "@/lib/format";
+import { digestsEnabled } from "@/server/digest/enabled";
 import { requireUser } from "@/server/auth/session";
 import { getDatabaseHealth } from "@/server/pipeline/retention";
 import { getIntegrationStatus, getPreferences } from "@/server/queries";
@@ -40,11 +44,11 @@ function Row({ ok, label, detail }: { ok: boolean; label: string; detail: string
 async function SettingsContent() {
   await connection();
   const user = await requireUser();
-  const [prefs, status, dbHealth] = await Promise.all([
-    getPreferences(user.id),
-    getIntegrationStatus(),
-    user.role === "admin" ? getDatabaseHealth() : Promise.resolve(null),
-  ]);
+  // Sequential — parallel queries on a max:1 pool hang forever on Vercel.
+  const prefs = await getPreferences(user.id);
+  const status = await getIntegrationStatus();
+  const dbHealth = user.role === "admin" ? await getDatabaseHealth() : null;
+  const globalDigests = digestsEnabled();
 
   return (
     <div className="space-y-6 fade-up">
@@ -69,6 +73,18 @@ async function SettingsContent() {
       </section>
 
       <section className="card p-5">
+        <h2 className="mb-3 font-semibold">Newsletter delivery</h2>
+        <DigestToggle enabled={prefs.telegramEnabled} globalOn={globalDigests} />
+        {user.role === "admin" && (
+          <div className="mt-4 border-t border-line pt-4">
+            <ActionButton action={disableAllDigestsAction} variant="secondary" pendingLabel="Disabling…">
+              Disable digests for all accounts
+            </ActionButton>
+          </div>
+        )}
+      </section>
+
+      <section className="card p-5">
         <h2 className="mb-3 font-semibold">Telegram</h2>
         <TelegramConnect connected={Boolean(prefs.telegramChatId)} botReady={status.telegramBot} />
       </section>
@@ -76,10 +92,10 @@ async function SettingsContent() {
       {user.role === "admin" && dbHealth && (
         <>
           <section className="card p-5">
-            <h2 className="font-semibold">Database (Supabase free)</h2>
+            <h2 className="font-semibold">Database</h2>
             <p className="mt-1 text-xs text-muted">
-              Free plan ~{dbHealth.freePlanLabel}. Daily pipeline purges articles older than {dbHealth.retentionDays} days
-              (saved articles kept). Tightens to 14d if the DB gets large.
+              Free-tier budget ~{dbHealth.freePlanLabel}. Daily pipeline purges articles older than{" "}
+              {dbHealth.retentionDays} days (saved articles kept).
             </p>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs">
@@ -156,6 +172,15 @@ async function SettingsContent() {
                 ok={status.telegramBot}
                 label="Telegram bot"
                 detail={status.telegramBot ? "Bot token configured — readers connect their own chat" : "Set TELEGRAM_BOT_TOKEN (dry runs until then)"}
+              />
+              <Row
+                ok={globalDigests}
+                label="Digest sends"
+                detail={
+                  globalDigests
+                    ? "DIGESTS_ENABLED=true — Cron may send Telegram digests"
+                    : "DIGESTS_ENABLED off — Cron collects/analyzes only"
+                }
               />
               <Row ok={status.n8n} label="n8n" detail={status.n8n ? `Reachable at ${appConfig.urls.n8n}` : "Not reachable (local only — production uses Vercel Cron)"} />
               <Row

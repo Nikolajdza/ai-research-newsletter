@@ -35,7 +35,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
     }
     const [linked] = await db
       .update(preferences)
-      .set({ telegramChatId: chatId, telegramLinkToken: null, telegramEnabled: true, updatedAt: new Date() })
+      .set({ telegramChatId: chatId, telegramLinkToken: null, updatedAt: new Date() })
       .where(eq(preferences.telegramLinkToken, token))
       .returning({ userId: preferences.userId });
     if (!linked) {
@@ -45,7 +45,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
     const [user] = await db.select({ name: users.displayName }).from(users).where(eq(users.id, linked.userId));
     await sendTelegramText(
       chatId,
-      `✅ Connected to InsightLoop${user ? ` as <b>${escapeHtml(user.name)}</b>` : ""}.\nYour daily digest will arrive here. Send /stop to disconnect.`,
+      `✅ Connected to InsightLoop${user ? ` as <b>${escapeHtml(user.name)}</b>` : ""}.\nTurn on <b>Daily Telegram digest</b> in Settings when you want cards here. Send /stop to disconnect.`,
     );
     return;
   }

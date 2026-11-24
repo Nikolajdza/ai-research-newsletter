@@ -22,6 +22,7 @@
     "test:canonicalize": "tsx src/server/ingest/canonicalize.test.ts"
   },
   "dependencies": {
+    "@vercel/functions": "^3.11.3",
     "drizzle-orm": "^0.45.4",
     "groq-sdk": "^1.6.0",
     "lucide-react": "^1.59.0",

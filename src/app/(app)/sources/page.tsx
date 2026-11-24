@@ -48,7 +48,8 @@ async function SourceList() {
   const isAdmin = user.role === "admin";
   const now = requestNow();
   const prefs = await getPreferences(user.id);
-  const [list, runs] = await Promise.all([listSourcesWithStats(isAdmin ? undefined : prefs.selectedTopics), listIngestRuns(1)]);
+  const list = await listSourcesWithStats(isAdmin ? undefined : prefs.selectedTopics);
+  const runs = await listIngestRuns(1);
   const followed = new Set(prefs.selectedTopics);
   const lastRun = runs[0];
 

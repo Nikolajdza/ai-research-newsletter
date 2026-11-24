@@ -402,3 +402,30 @@ export async function disconnectTelegramAction(): Promise<ActionResult> {
   refresh();
   return { ok: true, message: "Telegram disconnected" };
 }
+
+/** Per-user Telegram digest opt-in (also needs DIGESTS_ENABLED=true on the server). */
+export async function setTelegramDigestsAction(enabled: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  await getPreferences(user.id);
+  await db
+    .update(preferences)
+    .set({ telegramEnabled: enabled, updatedAt: new Date() })
+    .where(eq(preferences.userId, user.id));
+  bustArticleCaches(user.id);
+  refresh();
+  return {
+    ok: true,
+    message: enabled
+      ? "Digest delivery enabled for your account (server DIGESTS_ENABLED must also be true)"
+      : "Digest delivery disabled for your account",
+  };
+}
+
+/** Admin: turn off Telegram digests for every account (keeps chats linked). */
+export async function disableAllDigestsAction(): Promise<ActionResult> {
+  await requireAdmin();
+  await db.update(preferences).set({ telegramEnabled: false, updatedAt: new Date() });
+  bustArticleCaches();
+  refresh();
+  return { ok: true, message: "Telegram digests disabled for all accounts" };
+}
